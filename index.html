@@ -910,6 +910,14 @@
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
           <div class="section-title" style="margin:0;flex:1;">Takt Plan — All Residential Blocks</div>
           <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">SCALE</span>
+            <div class="ts-tabs" id="taktScaleTabs">
+              <button class="ts-btn" onclick="setTaktScale('day')">Daily</button>
+              <button class="ts-btn active" onclick="setTaktScale('week')">Weekly</button>
+              <button class="ts-btn" onclick="setTaktScale('month')">Monthly</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">VIEW</span>
             <div class="ts-tabs">
               <button class="ts-btn active" id="taktViewAll" onclick="setTaktView('all')">All Blocks</button>
@@ -975,6 +983,14 @@
 
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
           <div class="section-title" style="margin:0;flex:1;">Location-Based Schedule — All Blocks</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">SCALE</span>
+            <div class="ts-tabs" id="lbsScaleTabs">
+              <button class="ts-btn" onclick="setLBSScale('day')">Daily</button>
+              <button class="ts-btn active" onclick="setLBSScale('week')">Weekly</button>
+              <button class="ts-btn" onclick="setLBSScale('month')">Monthly</button>
+            </div>
+          </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;" id="lbsBlockFilter"></div>
         </div>
         <p style="font-size:11px;color:var(--text-dim);margin-bottom:14px;">Each row = one location (floor level). Colour bands show which trade train occupies that zone in each week. Read diagonally top-right for flow. <span style="color:var(--red);">Red</span> = bottleneck / zero buffer.</p>
@@ -1346,6 +1362,11 @@ let selectedBlock = '140A';
 let taktView = 'all';       // 'all' | 'single'
 let lbsFilterBlock = 'all'; // block id or 'all'
 let lbsTab = 'flow';        // 'flow' | 'table'
+let taktScale = 'week';     // 'day' | 'week' | 'month'
+let lbsScale  = 'week';     // 'day' | 'week' | 'month'
+
+// px width of one DAY at each takt/lbs scale
+const TAKT_DAY_PX = { day: 28, week: 7, month: 2.2 };
 
 // px width of one day at each timescale
 const TS_DAY_PX = {
@@ -1753,11 +1774,26 @@ function buildGantt() {
 //  TAKT PLAN
 // ══════════════════════════════════════════════
 
+function setTaktScale(s) {
+  taktScale = s;
+  document.querySelectorAll('#taktScaleTabs .ts-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['day','week','month'][i] === s);
+  });
+  buildTaktGrid();
+}
+
+function setLBSScale(s) {
+  lbsScale = s;
+  document.querySelectorAll('#lbsScaleTabs .ts-btn').forEach((b,i) => {
+    b.classList.toggle('active', ['day','week','month'][i] === s);
+  });
+  buildLBSContent();
+}
+
 function buildTaktBlockSelector() {
   const sel = document.getElementById('taktBlockSelector');
   if (!sel) return;
   sel.innerHTML = '';
-  // Only shown in single-block mode
   if (taktView !== 'single') { sel.style.display = 'none'; return; }
   sel.style.display = 'flex';
   LBS_BLOCKS.forEach(b => {
@@ -1773,8 +1809,7 @@ function buildTaktBlockSelector() {
 function buildTradeLegend() {
   const el = document.getElementById('tradeLegend');
   if (!el) return;
-  const trades = LBS_BLOCKS[0].trades;
-  el.innerHTML = trades.map(t =>
+  el.innerHTML = LBS_BLOCKS[0].trades.map(t =>
     `<div style="display:flex;align-items:center;gap:5px;">
       <div style="width:12px;height:12px;border-radius:2px;background:${t.color};opacity:0.85;"></div>
       <span style="font-size:10.5px;color:var(--text-dim);">${t.name}</span>
@@ -1793,159 +1828,152 @@ function setTaktView(v) {
 function buildTaktGrid() {
   const wrapper = document.getElementById('taktGridWrapper');
   if (!wrapper) return;
-
-  if (taktView === 'all') {
-    buildTaktGridAll(wrapper);
-  } else {
-    buildTaktGridSingle(wrapper, LBS_BLOCKS.find(b => b.id === selectedBlock));
-  }
+  if (taktView === 'all') buildTaktGridAll(wrapper);
+  else buildTaktGridSingle(wrapper, LBS_BLOCKS.find(b => b.id === selectedBlock));
 }
 
-// ── All-Blocks Takt: one sub-table per block, stacked vertically ──
 function buildTaktGridAll(wrapper) {
-  const WEEKS = 20;
-  const CELL_W = 60;
-  const CELL_H = 28;
-  const LABEL_W = 110;
-
   let html = '';
-
   LBS_BLOCKS.forEach(block => {
-    const totalLevels = block.levels;
-
     html += `<div style="margin-bottom:20px;">
-      <!-- Block header -->
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
         <div style="width:10px;height:10px;border-radius:50%;background:${block.color};"></div>
         <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text-bright);">${block.label}</span>
-        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">${block.levels} floors · Super-structure from ${block.superStart.toLocaleDateString('en-GB',{month:'short',year:'numeric'})} · OCD: ${block.ocd} · Takt ${block.takt}d</span>
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">${block.levels} floors · ${block.superStart.toLocaleDateString('en-GB',{month:'short',year:'numeric'})} · OCD: ${block.ocd} · Takt ${block.takt}d</span>
       </div>
       <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;">
-        <div style="display:inline-block;min-width:100%;">
-          ${buildTaktTableHTML(block, WEEKS, CELL_W, CELL_H, LABEL_W)}
-        </div>
+        <div style="display:inline-block;">${buildTaktTableHTML(block, taktScale)}</div>
       </div>
     </div>`;
   });
-
   wrapper.innerHTML = html;
 }
 
-// ── Single Block Takt: full detail with all floors ──
 function buildTaktGridSingle(wrapper, block) {
   if (!block) return;
-  const WEEKS = 28;
-  const CELL_W = 68;
-  const CELL_H = 32;
-  const LABEL_W = 130;
-
   wrapper.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
-    <div style="display:inline-block;min-width:100%;">
-      ${buildTaktTableHTML(block, WEEKS, CELL_W, CELL_H, LABEL_W)}
-    </div>
+    <div style="display:inline-block;">${buildTaktTableHTML(block, taktScale)}</div>
   </div>`;
 }
 
-function buildTaktTableHTML(block, WEEKS, CELL_W, CELL_H, LABEL_W) {
-  const totalCols = 1 + WEEKS;
-  const gridCols = `${LABEL_W}px repeat(${WEEKS}, ${CELL_W}px)`;
+function buildTaktTableHTML(block, scale) {
+  const dayPx   = TAKT_DAY_PX[scale];
+  const taktDays = block.takt;
+  const colDays  = scale === 'day' ? 1 : scale === 'week' ? 7 : 30;
+  const colPx    = Math.round(colDays * dayPx);
+  const LABEL_W  = 80;
+  const CELL_H   = scale === 'day' ? 36 : scale === 'week' ? 28 : 22;
+  const msPerDay = 86400000;
+  const totalDays = block.levels * taktDays + (scale === 'day' ? 14 : scale === 'week' ? 28 : 6);
+  const numCols   = Math.ceil(totalDays / colDays);
+  const curDayIdx = Math.floor((TODAY - block.superStart) / msPerDay);
 
-  // Get current week index relative to block's super-start
-  const msPerWeek = 7 * 86400000;
-  const curWeekIdx = Math.floor((TODAY - block.superStart) / msPerWeek);
+  // ── Build header cells ──
+  let headerHTML = `<div style="display:flex;position:sticky;top:0;z-index:10;background:var(--surface2);">
+    <div style="width:${LABEL_W}px;flex-shrink:0;padding:5px 8px;
+      border-bottom:1px solid var(--border);border-right:1px solid var(--border2);
+      font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);
+      display:flex;align-items:center;letter-spacing:0.5px;">LEVEL</div>`;
 
-  let html = `<div style="display:grid;grid-template-columns:${gridCols};font-family:'DM Mono',monospace;">`;
-
-  // ── Header row ──
-  html += `<div style="padding:6px 10px;background:var(--surface2);border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-size:9px;color:var(--text-dim);letter-spacing:1px;display:flex;align-items:center;">FLOOR / WEEK</div>`;
-  for (let w = 0; w < WEEKS; w++) {
-    const wkDate = new Date(block.superStart.getTime() + w * 7 * 86400000);
-    const mo = wkDate.toLocaleDateString('en-GB',{month:'short'});
-    const yr = wkDate.getFullYear().toString().slice(2);
-    const wn = Math.ceil((wkDate - new Date(wkDate.getFullYear(),0,1)) / (7*86400000));
-    const isNow = w === curWeekIdx;
-    html += `<div style="
-      padding:4px 2px;text-align:center;
-      background:${isNow?'rgba(37,99,235,0.18)':'var(--surface2)'};
+  for (let c = 0; c < numCols; c++) {
+    const colStartDay = c * colDays;
+    const colDate = new Date(block.superStart.getTime() + colStartDay * msPerDay);
+    const isCurrent = curDayIdx >= colStartDay && curDayIdx < colStartDay + colDays;
+    const isWeekend = scale === 'day' && (colDate.getDay() === 0 || colDate.getDay() === 6);
+    let label = '', sub = '';
+    if (scale === 'day') {
+      label = colDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+      sub = ['Su','Mo','Tu','We','Th','Fr','Sa'][colDate.getDay()];
+    } else if (scale === 'week') {
+      const wn = Math.ceil((colDate - new Date(colDate.getFullYear(),0,1)) / (7*msPerDay));
+      label = `W${wn}`;
+      sub = colDate.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+    } else {
+      label = colDate.toLocaleDateString('en-GB',{month:'short'});
+      sub = String(colDate.getFullYear()).slice(2);
+    }
+    headerHTML += `<div style="
+      width:${colPx}px;flex-shrink:0;padding:4px 2px;text-align:center;
+      background:${isCurrent?'rgba(37,99,235,0.2)':isWeekend?'rgba(255,255,255,0.02)':'var(--surface2)'};
       border-bottom:1px solid var(--border);border-right:1px solid rgba(30,40,64,0.5);
-      font-size:8.5px;color:${isNow?'var(--accent2)':'var(--text-dim)'};
-      line-height:1.3;font-weight:${isNow?600:400};
-    ">W${wn}<br/><span style="font-size:7.5px;">${mo}'${yr}</span></div>`;
+      font-family:'DM Mono',monospace;font-size:${scale==='day'?8:9}px;
+      color:${isCurrent?'var(--accent2)':isWeekend?'var(--text-dim)':'var(--text-dim)'};
+      line-height:1.3;font-weight:${isCurrent?600:400};white-space:nowrap;overflow:hidden;
+    ">${label}${sub&&colPx>20?`<br/><span style="font-size:7px;">${sub}</span>`:''}
+    ${isCurrent?'<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:2px;height:3px;background:var(--accent2);"></div>':''}</div>`;
   }
+  headerHTML += `</div>`;
 
-  // ── Floor rows — top floor first (highest level down to L02) ──
+  // ── Build floor rows ──
+  let floorHTML = '';
   for (let fi = block.levels - 1; fi >= 0; fi--) {
-    const floor = fi + 2; // L02 = index 0
+    const floor = fi + 2;
     const fd = block.floorData[fi];
     const isBottleneck = fd.buffer === 0;
 
-    // Row label
-    html += `<div style="
-      padding:4px 10px;
+    let rowCells = `<div style="width:${LABEL_W}px;flex-shrink:0;padding:3px 6px;
       background:${isBottleneck?'rgba(239,68,68,0.06)':'var(--bg)'};
-      border-bottom:1px solid rgba(30,40,64,0.4);
-      border-right:1px solid var(--border);
-      display:flex;align-items:center;gap:6px;
-      font-size:10px;color:${isBottleneck?'var(--red)':'var(--text-dim)'};
-    ">
-      <div style="width:4px;height:4px;border-radius:50%;background:${isBottleneck?'var(--red)':'var(--text-dim)'};"></div>
-      L${String(floor).padStart(2,'0')}
-      ${isBottleneck?'<span style="font-size:8px;color:var(--red);margin-left:2px;">⚠</span>':''}
+      border-bottom:1px solid rgba(30,40,64,0.35);border-right:1px solid var(--border);
+      font-family:'DM Mono',monospace;font-size:9.5px;
+      color:${isBottleneck?'var(--red)':'var(--text-dim)'};
+      display:flex;align-items:center;gap:4px;height:${CELL_H}px;">
+      <div style="width:4px;height:4px;border-radius:50%;background:${isBottleneck?'var(--red)':'var(--text-dim)'};flex-shrink:0;"></div>
+      L${String(floor).padStart(2,'0')}${isBottleneck?' ⚠':''}
     </div>`;
 
-    // Week cells for this floor
-    for (let w = 0; w < WEEKS; w++) {
-      const isNow = w === curWeekIdx;
-      const activeTrades = [];
+    for (let c = 0; c < numCols; c++) {
+      const colStartDay = c * colDays;
+      const isCurrent = curDayIdx >= colStartDay && curDayIdx < colStartDay + colDays;
+      const isPast = colStartDay + colDays <= curDayIdx;
+      const colDate = new Date(block.superStart.getTime() + colStartDay * msPerDay);
+      const isWeekend = scale === 'day' && (colDate.getDay() === 0 || colDate.getDay() === 6);
 
+      const activeTrades = [];
       block.trades.forEach(trade => {
-        // fi = floor index (0 = L02), each floor starts 1 takt after previous
-        const tradeStartWeek = fi + trade.offset;
-        const tradeEndWeek   = tradeStartWeek + 1;
-        if (w >= tradeStartWeek && w < tradeEndWeek) activeTrades.push(trade);
+        const tradeStartDay = fi * taktDays + trade.offset * taktDays;
+        const tradeEndDay   = tradeStartDay + taktDays;
+        const overlapStart  = Math.max(colStartDay, tradeStartDay);
+        const overlapEnd    = Math.min(colStartDay + colDays, tradeEndDay);
+        if (overlapEnd > overlapStart) activeTrades.push({ trade, frac:(overlapEnd-overlapStart)/colDays });
       });
 
       const isConflict = activeTrades.length > 1;
-      let cellBg = isNow ? 'rgba(37,99,235,0.06)' : 'transparent';
-      if (isConflict) cellBg = 'rgba(239,68,68,0.06)';
+      let bg = isWeekend ? 'rgba(255,255,255,0.015)' : isCurrent ? 'rgba(37,99,235,0.05)' : 'transparent';
+      if (isConflict) bg = 'rgba(239,68,68,0.06)';
 
       let inner = '';
+      const showText = colPx >= 22;
       if (activeTrades.length === 1) {
-        const t = activeTrades[0];
-        inner = `<div style="
-          position:absolute;inset:3px;
-          background:${t.color};opacity:0.82;
-          border-radius:3px;
-          display:flex;align-items:center;justify-content:center;
-          font-size:8px;color:rgba(255,255,255,0.95);font-weight:500;
-        ">${t.short}</div>`;
+        const { trade, frac } = activeTrades[0];
+        const barW = scale === 'day' ? Math.round(frac * 96) : 96;
+        const barL = scale === 'day' ? Math.round((1-frac)*48) : 2;
+        inner = `<div style="position:absolute;top:3px;bottom:3px;left:${barL}%;width:${barW}%;
+          background:${trade.color};opacity:${isPast?0.35:0.82};border-radius:2px;
+          display:flex;align-items:center;justify-content:center;overflow:hidden;
+          font-family:'DM Mono',monospace;font-size:7px;color:rgba(255,255,255,0.95);">
+          ${showText ? trade.short : ''}</div>`;
       } else if (activeTrades.length > 1) {
-        const w2 = 100 / activeTrades.length;
-        inner = activeTrades.map((t, ai) =>
-          `<div style="
-            position:absolute;top:3px;bottom:3px;
-            left:${ai*w2+1}%;width:${w2-2}%;
-            background:${t.color};opacity:0.8;
-            border-radius:2px;
+        const pw = 96 / activeTrades.length;
+        inner = activeTrades.map(({trade},ai) =>
+          `<div style="position:absolute;top:3px;bottom:3px;left:${2+ai*pw}%;width:${pw}%;
+            background:${trade.color};opacity:0.78;border-radius:2px;overflow:hidden;
             display:flex;align-items:center;justify-content:center;
-            font-size:7px;color:rgba(255,255,255,0.95);
-          ">${t.short}</div>`
+            font-size:6.5px;font-family:'DM Mono',monospace;color:rgba(255,255,255,0.9);">
+            ${showText && colPx > 30 ? trade.short : ''}</div>`
         ).join('');
-        inner += `<div style="position:absolute;top:2px;right:2px;width:5px;height:5px;background:var(--red);border-radius:50%;z-index:2;"></div>`;
+        inner += `<div style="position:absolute;top:1px;right:1px;width:5px;height:5px;background:var(--red);border-radius:50%;z-index:2;"></div>`;
       }
 
-      html += `<div style="
-        position:relative;height:${CELL_H}px;
-        background:${cellBg};
-        border-bottom:1px solid rgba(30,40,64,0.35);
-        border-right:1px solid rgba(30,40,64,0.35);
-        ${isNow?'border-left:1px solid rgba(37,99,235,0.4);':''}
-      ">${inner}</div>`;
+      rowCells += `<div style="position:relative;width:${colPx}px;flex-shrink:0;height:${CELL_H}px;
+        background:${bg};border-bottom:1px solid rgba(30,40,64,0.3);
+        border-right:1px solid rgba(30,40,64,0.3);
+        ${isCurrent?'border-left:2px solid rgba(37,99,235,0.5);':''}">${inner}</div>`;
     }
+
+    floorHTML += `<div style="display:flex;">${rowCells}</div>`;
   }
 
-  html += `</div>`; // close grid
-  return html;
+  return `<div style="font-family:'DM Mono',monospace;">${headerHTML}${floorHTML}</div>`;
 }
 
 // ══════════════════════════════════════════════
@@ -1988,93 +2016,145 @@ function buildLBSContent() {
 
 // ── Flow Lines: LBMS-style diagonal flow visualisation per block ──
 function buildLBSFlowLines(el, blocks) {
-  const WEEKS = 22;
-  const CELL_W = 52;
-  const CELL_H = 22;
-  const LABEL_W = 100;
+  const scale    = lbsScale;
+  const dayPx    = TAKT_DAY_PX[scale];
+  const colDays  = scale === 'day' ? 1 : scale === 'week' ? 7 : 30;
+  const colPx    = Math.round(colDays * dayPx);
+  const LABEL_W  = 80;
+  const CELL_H   = scale === 'day' ? 30 : scale === 'week' ? 22 : 18;
+  const msPerDay = 86400000;
 
   let html = '';
 
   blocks.forEach(block => {
-    const msPerWeek = 7 * 86400000;
-    const curW = Math.floor((TODAY - block.superStart) / msPerWeek);
+    const taktDays  = block.takt;
+    const totalDays = block.levels * taktDays + (scale === 'day' ? 14 : scale === 'week' ? 28 : 6);
+    const numCols   = Math.ceil(totalDays / colDays);
+    const curDayIdx = Math.floor((TODAY - block.superStart) / msPerDay);
 
-    html += `<div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-        <div style="width:10px;height:10px;border-radius:50%;background:${block.color};"></div>
-        <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text-bright);">${block.label}</span>
-        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">${block.levels} storeys · OCD ${block.ocd} · Takt ${block.takt}d/floor</span>
-        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent2);margin-left:auto;">Super-structure: ${block.superStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
-      </div>
-      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
-        <div style="display:inline-block;">
-          <div style="display:grid;grid-template-columns:${LABEL_W}px repeat(${WEEKS},${CELL_W}px);font-family:'DM Mono',monospace;">
+    // Build header
+    let hdrCells = `<div style="width:${LABEL_W}px;flex-shrink:0;padding:5px 8px;
+      background:var(--surface2);border-bottom:1px solid var(--border);
+      border-right:1px solid var(--border2);font-family:'DM Mono',monospace;
+      font-size:9px;color:var(--text-dim);display:flex;align-items:center;">LEVEL</div>`;
 
-            <!-- header -->
-            <div style="padding:5px 8px;background:var(--surface2);border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-size:9px;color:var(--text-dim);">LEVEL</div>`;
-
-    for (let w = 0; w < WEEKS; w++) {
-      const wd = new Date(block.superStart.getTime() + w * msPerWeek);
-      const mo = wd.toLocaleDateString('en-GB',{month:'short'});
-      const wn = Math.ceil((wd - new Date(wd.getFullYear(),0,1)) / msPerWeek);
-      const isNow = w === curW;
-      html += `<div style="padding:4px 2px;text-align:center;background:${isNow?'rgba(37,99,235,0.2)':'var(--surface2)'};border-bottom:1px solid var(--border);border-right:1px solid rgba(30,40,64,0.5);font-size:8px;color:${isNow?'var(--accent2)':'var(--text-dim)'};line-height:1.3;font-weight:${isNow?600:400};">W${wn}<br/><span style="font-size:7px;">${mo}</span></div>`;
+    for (let c = 0; c < numCols; c++) {
+      const cs = c * colDays;
+      const cd = new Date(block.superStart.getTime() + cs * msPerDay);
+      const isCur = curDayIdx >= cs && curDayIdx < cs + colDays;
+      const isWkd = scale === 'day' && (cd.getDay() === 0 || cd.getDay() === 6);
+      let lbl = '', sub = '';
+      if (scale === 'day') {
+        lbl = cd.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+        sub = ['Su','Mo','Tu','We','Th','Fr','Sa'][cd.getDay()];
+      } else if (scale === 'week') {
+        const wn = Math.ceil((cd - new Date(cd.getFullYear(),0,1)) / (7*msPerDay));
+        lbl = `W${wn}`; sub = cd.toLocaleDateString('en-GB',{month:'short',year:'2-digit'});
+      } else {
+        lbl = cd.toLocaleDateString('en-GB',{month:'short'}); sub = String(cd.getFullYear()).slice(2);
+      }
+      hdrCells += `<div style="width:${colPx}px;flex-shrink:0;padding:4px 2px;text-align:center;
+        background:${isCur?'rgba(37,99,235,0.2)':isWkd?'rgba(255,255,255,0.02)':'var(--surface2)'};
+        border-bottom:1px solid var(--border);border-right:1px solid rgba(30,40,64,0.5);
+        font-family:'DM Mono',monospace;font-size:${scale==='day'?8:9}px;
+        color:${isCur?'var(--accent2)':'var(--text-dim)'};
+        line-height:1.3;font-weight:${isCur?600:400};white-space:nowrap;overflow:hidden;">
+        ${lbl}${sub&&colPx>18?`<br/><span style="font-size:7px;">${sub}</span>`:''}
+      </div>`;
     }
 
-    // Rows — top floor first
+    // Build floor rows
+    let floorRows = '';
     for (let fi = block.levels - 1; fi >= 0; fi--) {
       const floor = fi + 2;
       const fd = block.floorData[fi];
-      const isBottleneck = fd.buffer === 0;
+      const isBN = fd.buffer === 0;
 
-      html += `<div style="padding:3px 8px;background:${isBottleneck?'rgba(239,68,68,0.06)':'transparent'};border-bottom:1px solid rgba(30,40,64,0.3);border-right:1px solid var(--border);font-size:9.5px;color:${isBottleneck?'var(--red)':'var(--text-dim)'};display:flex;align-items:center;gap:5px;white-space:nowrap;">
-        ${isBottleneck?'⚠ ':''}L${String(floor).padStart(2,'0')}
+      let cells = `<div style="width:${LABEL_W}px;flex-shrink:0;padding:3px 6px;
+        background:${isBN?'rgba(239,68,68,0.06)':'transparent'};
+        border-bottom:1px solid rgba(30,40,64,0.3);border-right:1px solid var(--border);
+        font-family:'DM Mono',monospace;font-size:9.5px;
+        color:${isBN?'var(--red)':'var(--text-dim)'};
+        display:flex;align-items:center;gap:4px;height:${CELL_H}px;white-space:nowrap;">
+        ${isBN?'⚠ ':''}L${String(floor).padStart(2,'0')}
       </div>`;
 
-      for (let w = 0; w < WEEKS; w++) {
-        const isNow = w === curW;
-        // Which trade for this floor+week?
-        let activeTrades = [];
-        block.trades.forEach(t => {
-          const ts = fi + t.offset;
-          if (w >= ts && w < ts + 1) activeTrades.push(t);
+      for (let c = 0; c < numCols; c++) {
+        const cs   = c * colDays;
+        const isCur = curDayIdx >= cs && curDayIdx < cs + colDays;
+        const isPast = cs + colDays <= curDayIdx;
+        const cd   = new Date(block.superStart.getTime() + cs * msPerDay);
+        const isWkd = scale === 'day' && (cd.getDay() === 0 || cd.getDay() === 6);
+
+        const aT = [];
+        block.trades.forEach(trade => {
+          const ts = fi * taktDays + trade.offset * taktDays;
+          const te = ts + taktDays;
+          const os = Math.max(cs, ts), oe = Math.min(cs + colDays, te);
+          if (oe > os) aT.push({ trade, frac:(oe-os)/colDays });
         });
 
-        // Past or future shading
-        const isPast = w < curW;
-        const isFuture = w > curW;
+        const isCon = aT.length > 1;
+        let bg = isWkd?'rgba(255,255,255,0.015)':isCur?'rgba(37,99,235,0.05)':'transparent';
+        if (isCon) bg = 'rgba(239,68,68,0.06)';
+        const showTxt = colPx >= 22;
 
         let inner = '';
-        if (activeTrades.length === 1) {
-          const t = activeTrades[0];
-          const op = isPast ? 0.4 : 0.82;
-          inner = `<div style="position:absolute;inset:2px;background:${t.color};opacity:${op};border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:rgba(255,255,255,0.95);">${t.short}</div>`;
-        } else if (activeTrades.length > 1) {
-          const pw = 100 / activeTrades.length;
-          inner = activeTrades.map((t, ai) =>
-            `<div style="position:absolute;top:2px;bottom:2px;left:${ai*pw+0.5}%;width:${pw-1}%;background:${t.color};opacity:0.78;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:6.5px;color:rgba(255,255,255,0.9);">${t.short}</div>`
-          ).join('');
-          inner += `<div style="position:absolute;top:1px;right:1px;width:5px;height:5px;background:var(--red);border-radius:50%;z-index:2;"></div>`;
+        if (aT.length === 1) {
+          const {trade, frac} = aT[0];
+          const bw = scale==='day'?Math.round(frac*96):96;
+          const bl = scale==='day'?Math.round((1-frac)*48):2;
+          inner = `<div style="position:absolute;top:2px;bottom:2px;left:${bl}%;width:${bw}%;
+            background:${trade.color};opacity:${isPast?0.35:0.82};border-radius:2px;
+            display:flex;align-items:center;justify-content:center;overflow:hidden;
+            font-family:'DM Mono',monospace;font-size:7px;color:rgba(255,255,255,0.95);">
+            ${showTxt?trade.short:''}</div>`;
+        } else if (aT.length > 1) {
+          const pw = 96/aT.length;
+          inner = aT.map(({trade},ai)=>
+            `<div style="position:absolute;top:2px;bottom:2px;left:${2+ai*pw}%;width:${pw}%;
+              background:${trade.color};opacity:0.78;border-radius:2px;overflow:hidden;
+              display:flex;align-items:center;justify-content:center;
+              font-size:6.5px;font-family:'DM Mono',monospace;color:rgba(255,255,255,0.9);">
+              ${showTxt&&colPx>28?trade.short:''}</div>`
+          ).join('') + `<div style="position:absolute;top:1px;right:1px;width:5px;height:5px;background:var(--red);border-radius:50%;z-index:2;"></div>`;
         }
 
-        html += `<div style="position:relative;height:${CELL_H}px;background:${isNow?'rgba(37,99,235,0.06)':isFuture?'rgba(10,13,18,0.3)':'transparent'};border-bottom:1px solid rgba(30,40,64,0.3);border-right:1px solid rgba(30,40,64,0.3);${isNow?'border-left:1px solid rgba(37,99,235,0.35);':''}">${inner}</div>`;
+        cells += `<div style="position:relative;width:${colPx}px;flex-shrink:0;height:${CELL_H}px;
+          background:${bg};border-bottom:1px solid rgba(30,40,64,0.28);
+          border-right:1px solid rgba(30,40,64,0.28);
+          ${isCur?'border-left:2px solid rgba(37,99,235,0.45);':''}">${inner}</div>`;
       }
+      floorRows += `<div style="display:flex;">${cells}</div>`;
     }
 
-    html += `</div></div></div>
+    // Summary stats
+    const stats = block.trades.map(t =>
+      `<div style="display:flex;align-items:center;gap:5px;">
+        <div style="width:8px;height:8px;border-radius:1px;background:${t.color};opacity:0.8;"></div>
+        <span style="font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;">${t.short}: ${block.floorData[0].crew[t.short]??'—'} crew</span>
+      </div>`
+    ).join('');
 
-      <!-- Summary stats bar -->
-      <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
-        ${block.trades.map(t => {
-          const totalCrew = Object.values(block.floorData[0].crew).reduce((a,b)=>a+b,0);
-          return `<div style="display:flex;align-items:center;gap:5px;">
-            <div style="width:8px;height:8px;border-radius:1px;background:${t.color};opacity:0.8;"></div>
-            <span style="font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;">${t.short}: ${block.floorData[0].crew[t.short]??'—'} crew</span>
-          </div>`;
-        }).join('')}
+    html += `<div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+        <div style="width:10px;height:10px;border-radius:50%;background:${block.color};"></div>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text-bright);">${block.label}</span>
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">${block.levels} storeys · OCD ${block.ocd} · Takt ${block.takt}d/floor</span>
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent2);margin-left:auto;">Start: ${block.superStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <div style="display:inline-block;">
+          <div style="font-family:'DM Mono',monospace;">
+            <div style="display:flex;position:sticky;top:0;z-index:5;background:var(--surface2);">${hdrCells}</div>
+            ${floorRows}
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">${stats}
         <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">
-          Total floors: <span style="color:var(--text-bright);">${block.levels}</span> &nbsp;·&nbsp;
-          Total duration: <span style="color:var(--accent2);">${block.levels * block.takt + 3} weeks</span> (incl. finishing lag)
+          Floors: <span style="color:var(--text-bright);">${block.levels}</span> &nbsp;·&nbsp;
+          Duration: <span style="color:var(--accent2);">${block.levels * block.takt + 3} wks</span>
         </div>
       </div>
     </div>`;
