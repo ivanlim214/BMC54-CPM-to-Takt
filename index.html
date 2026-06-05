@@ -1,0 +1,2298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BMC54 & 54A — LPS + Takt Planning Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Barlow+Condensed:wght@300;400;500;600;700&family=Barlow:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0d12;
+    --surface: #111520;
+    --surface2: #161c2a;
+    --border: #1e2840;
+    --border2: #253050;
+    --text: #c8d4e8;
+    --text-dim: #5a6a88;
+    --text-bright: #e8f0ff;
+    --accent: #2563eb;
+    --accent2: #38bdf8;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --orange: #f97316;
+    --purple: #a855f7;
+    --teal: #14b8a6;
+    --pink: #ec4899;
+
+    /* Phase colors */
+    --c-prelim: #64748b;
+    --c-substructure: #7c3aed;
+    --c-superstructure: #2563eb;
+    --c-archi: #059669;
+    --c-mep: #d97706;
+    --c-finishing: #be185d;
+    --c-handover: #0369a1;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Barlow', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 200;
+  }
+
+  .logo-mark {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    color: white; letter-spacing: -1px;
+    flex-shrink: 0;
+  }
+
+  .header-title h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 17px; font-weight: 600;
+    color: var(--text-bright); letter-spacing: 0.5px;
+  }
+
+  .header-title p {
+    font-size: 11px; color: var(--text-dim);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .header-controls {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .view-tabs {
+    display: flex; background: var(--bg); border-radius: 6px;
+    border: 1px solid var(--border); overflow: hidden;
+  }
+
+  .view-tab {
+    padding: 6px 14px;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer; border: none;
+    background: transparent; color: var(--text-dim);
+    font-family: 'Barlow', sans-serif;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+
+  .view-tab.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .view-tab:hover:not(.active) {
+    color: var(--text-bright);
+    background: var(--border);
+  }
+
+  /* ── Layout ── */
+  .main-layout {
+    display: flex;
+    height: calc(100vh - 60px);
+  }
+
+  .sidebar {
+    width: 260px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .content {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar-section {
+    border-bottom: 1px solid var(--border);
+    padding: 12px;
+  }
+
+  .sidebar-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; font-weight: 500;
+    color: var(--text-dim);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .phase-item {
+    display: flex; align-items: center;
+    gap: 8px; padding: 5px 6px;
+    border-radius: 4px; cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .phase-item:hover { background: var(--border); }
+  .phase-item.active { background: var(--border2); }
+
+  .phase-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%; flex-shrink: 0;
+  }
+
+  .phase-label {
+    font-size: 11.5px; font-weight: 400;
+    color: var(--text); flex: 1;
+    line-height: 1.3;
+  }
+
+  .phase-dates {
+    font-family: 'DM Mono', monospace;
+    font-size: 9.5px; color: var(--text-dim);
+  }
+
+  .legend-row {
+    display: flex; align-items: center;
+    gap: 8px; margin-bottom: 5px;
+  }
+
+  .legend-swatch {
+    width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0;
+  }
+
+  .legend-label {
+    font-size: 11px; color: var(--text-dim);
+  }
+
+  .stat-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px;
+  }
+
+  .stat-value {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px; font-weight: 700;
+    color: var(--text-bright);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 9.5px; color: var(--text-dim);
+    margin-top: 2px;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+
+  /* ── View panels ── */
+  .view-panel { display: none; }
+  .view-panel.active { display: block; }
+
+  /* ── MASTER PROGRAMME ── */
+  #gantt-container {
+    padding: 16px;
+    min-width: 1400px;
+  }
+
+  .gantt-header-row {
+    display: flex;
+    margin-bottom: 4px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .gantt-label-col { width: 360px; flex-shrink: 0; }
+
+  .gantt-timeline {
+    flex: 1;
+    display: flex;
+  }
+
+  .year-block {
+    display: flex; flex-direction: column;
+  }
+
+  .year-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 600;
+    color: var(--text-bright);
+    text-align: center;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--border2);
+  }
+
+  .half-labels {
+    display: flex;
+  }
+
+  .half-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; color: var(--text-dim);
+    text-align: center; flex: 1;
+  }
+
+  .gantt-row {
+    display: flex;
+    align-items: center;
+    min-height: 26px;
+    border-bottom: 1px solid rgba(30,40,64,0.5);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .gantt-row:hover { background: rgba(37,99,235,0.05); }
+  .gantt-row.summary { background: rgba(37,99,235,0.04); }
+  .gantt-row.selected { background: rgba(37,99,235,0.12); }
+
+  .task-label {
+    width: 360px; flex-shrink: 0;
+    display: flex; align-items: center;
+    gap: 4px; padding: 2px 8px;
+  }
+
+  .task-indent { display: inline-block; }
+
+  .task-name {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 290px;
+  }
+
+  .task-name.summary-name {
+    font-weight: 600;
+    color: var(--text-bright);
+    font-size: 11.5px;
+  }
+
+  .task-name.milestone-name {
+    color: var(--yellow);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+  }
+
+  .task-bar-area {
+    flex: 1;
+    position: relative;
+    height: 26px;
+    display: flex; align-items: center;
+  }
+
+  .task-bar {
+    position: absolute;
+    height: 14px;
+    border-radius: 2px;
+    display: flex; align-items: center;
+    overflow: hidden;
+    cursor: pointer;
+    transition: opacity 0.15s, filter 0.15s;
+    min-width: 3px;
+  }
+
+  .task-bar:hover { filter: brightness(1.3); }
+
+  .task-bar.summary-bar {
+    height: 10px; border-radius: 1px;
+    opacity: 0.7;
+  }
+
+  .task-bar.milestone-bar {
+    width: 10px !important;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--yellow) !important;
+    transform: translateX(-4px);
+  }
+
+  .bar-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    color: rgba(255,255,255,0.8);
+    padding: 0 4px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .today-line {
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(239,68,68,0.7);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .today-line::after {
+    content: 'TODAY';
+    position: absolute;
+    top: 0;
+    left: 3px;
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    color: var(--red);
+    white-space: nowrap;
+  }
+
+  /* ── TAKT PLAN ── */
+  #takt-container {
+    padding: 16px;
+  }
+
+  .takt-block-selector {
+    display: flex; gap: 8px; margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .blk-btn {
+    padding: 6px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .blk-btn.active {
+    border-color: var(--accent2);
+    background: rgba(56,189,248,0.1);
+    color: var(--accent2);
+  }
+
+  .blk-btn:hover:not(.active) {
+    border-color: var(--border2);
+    color: var(--text);
+  }
+
+  .takt-grid-container {
+    overflow-x: auto;
+  }
+
+  .takt-grid {
+    display: grid;
+    gap: 0;
+    min-width: 800px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .takt-col-header {
+    background: var(--surface);
+    padding: 8px 6px;
+    text-align: center;
+    font-family: 'DM Mono', monospace;
+    font-size: 9.5px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+  }
+
+  .takt-col-header.week-header {
+    font-size: 10px;
+    color: var(--text-bright);
+  }
+
+  .takt-row-label {
+    background: var(--surface);
+    padding: 8px 12px;
+    font-size: 11.5px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    display: flex; align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .takt-cell {
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    min-height: 40px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+
+  .takt-cell:hover { background: rgba(37,99,235,0.08) !important; }
+
+  .takt-activity {
+    position: absolute;
+    top: 4px; bottom: 4px;
+    border-radius: 3px;
+    display: flex; align-items: center;
+    padding: 0 6px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+
+  .takt-activity:hover { filter: brightness(1.25); }
+
+  .takt-activity-label {
+    font-size: 9px;
+    font-family: 'DM Mono', monospace;
+    color: rgba(255,255,255,0.9);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .takt-flow-arrow {
+    position: absolute;
+    right: -5px;
+    width: 10px; height: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; color: var(--text-dim);
+    z-index: 2;
+  }
+
+  /* ── LPS ── */
+  #lps-container {
+    padding: 16px;
+  }
+
+  .lps-week-view {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .lps-week-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .lps-week-header {
+    padding: 8px 12px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 600;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between;
+    align-items: center;
+  }
+
+  .ppc-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  .ppc-good { background: rgba(34,197,94,0.15); color: var(--green); }
+  .ppc-warn { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .ppc-bad  { background: rgba(239,68,68,0.15);  color: var(--red); }
+
+  .lps-task-list {
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+
+  .lps-task {
+    padding: 5px 8px;
+    border-radius: 4px;
+    font-size: 10.5px;
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+    border: 1px solid transparent;
+  }
+
+  .lps-task:hover { border-color: var(--border2); }
+
+  .lps-task.committed { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); }
+  .lps-task.constraint { background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.2); }
+  .lps-task.completed  { background: rgba(100,116,139,0.08); opacity: 0.6; }
+
+  .task-status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%; flex-shrink: 0;
+  }
+
+  .lps-task-name { flex: 1; color: var(--text); }
+  .lps-task-who { font-family: 'DM Mono', monospace; font-size: 9px; color: var(--text-dim); }
+
+  /* PPC Chart */
+  .ppc-chart-area {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .ppc-bars {
+    display: flex; align-items: flex-end;
+    gap: 10px; height: 100px;
+    margin-top: 10px;
+  }
+
+  .ppc-bar-col {
+    flex: 1; display: flex;
+    flex-direction: column; align-items: center;
+    gap: 4px;
+  }
+
+  .ppc-bar {
+    width: 100%;
+    border-radius: 2px 2px 0 0;
+    transition: height 0.3s ease;
+    min-height: 2px;
+  }
+
+  .ppc-bar-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px; color: var(--text-dim);
+    text-align: center;
+  }
+
+  .ppc-bar-val {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 12px; font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  /* ── LOCATION-BASED ── */
+  #lbs-container {
+    padding: 16px;
+  }
+
+  .lbs-grid {
+    overflow-x: auto;
+  }
+
+  .lbs-table {
+    border-collapse: collapse;
+    min-width: 100%;
+    font-size: 11px;
+  }
+
+  .lbs-table th {
+    background: var(--surface2);
+    padding: 8px 12px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--text-dim);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    position: sticky; top: 0; z-index: 5;
+  }
+
+  .lbs-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(30,40,64,0.4);
+    vertical-align: middle;
+  }
+
+  .lbs-table tr:hover td { background: rgba(37,99,235,0.04); }
+
+  .flow-bar {
+    height: 10px; border-radius: 2px;
+    display: inline-block; vertical-align: middle;
+  }
+
+  .bottleneck-flag {
+    background: rgba(239,68,68,0.15);
+    color: var(--red);
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .ok-flag {
+    background: rgba(34,197,94,0.12);
+    color: var(--green);
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ── Tooltip ── */
+  .tooltip {
+    position: fixed;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    max-width: 300px;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+
+  .tooltip.visible { opacity: 1; }
+
+  .tooltip-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px; font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 6px;
+  }
+
+  .tooltip-row {
+    display: flex; justify-content: space-between;
+    gap: 12px; margin-bottom: 3px;
+  }
+
+  .tooltip-key {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--text-dim);
+  }
+
+  .tooltip-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--text-bright);
+    text-align: right;
+  }
+
+  .lps-constraints-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 14px;
+  }
+
+  .constraint-item {
+    display: flex; gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+
+  .constraint-type {
+    width: 80px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-family: 'DM Mono', monospace;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .c-material { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .c-labor    { background: rgba(249,115,22,0.15); color: var(--orange); }
+  .c-access   { background: rgba(239,68,68,0.15);  color: var(--red); }
+  .c-info     { background: rgba(56,189,248,0.15); color: var(--accent2); }
+  .c-external { background: rgba(245,158,11,0.15); color: var(--yellow); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  .section-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 15px; font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1; height: 1px;
+    background: var(--border);
+  }
+
+  /* ── Timescale controls ── */
+  .timescale-controls {
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .ts-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px; color: var(--text-dim);
+    letter-spacing: 0.5px;
+    margin-right: 2px;
+  }
+
+  .ts-tabs {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .ts-btn {
+    padding: 5px 12px;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer; border: none;
+    background: transparent; color: var(--text-dim);
+    font-family: 'Barlow', sans-serif;
+    transition: all 0.15s;
+    letter-spacing: 0.2px;
+    border-right: 1px solid var(--border);
+  }
+
+  .ts-btn:last-child { border-right: none; }
+
+  .ts-btn.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  .ts-btn:hover:not(.active) {
+    background: var(--border);
+    color: var(--text-bright);
+  }
+
+  /* navigator mini-bar */
+  .gantt-navigator {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    height: 14px;
+    cursor: crosshair;
+    overflow: hidden;
+  }
+
+  .nav-viewport {
+    position: absolute;
+    top: 0; bottom: 0;
+    background: rgba(37,99,235,0.25);
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    pointer-events: none;
+  }
+
+  .tag { display: inline-flex; align-items: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">LPS</div>
+  <div class="header-title">
+    <h1>BMC54 & 54A — MASTER PROGRAMME</h1>
+    <p>Last Planner System · Takt Planning · Location-Based Scheduling · Rev 5 · 29 Apr 2025</p>
+  </div>
+  <div class="header-controls">
+    <div class="timescale-controls" id="timescaleControls">
+      <span class="ts-label">SCALE</span>
+      <div class="ts-tabs">
+        <button class="ts-btn" onclick="setTimescale('week')">Weekly</button>
+        <button class="ts-btn" onclick="setTimescale('month')">Monthly</button>
+        <button class="ts-btn active" onclick="setTimescale('quarter')">Quarterly</button>
+        <button class="ts-btn" onclick="setTimescale('half')">Half-Year</button>
+        <button class="ts-btn" onclick="setTimescale('year')">Yearly</button>
+      </div>
+    </div>
+    <div class="view-tabs">
+      <button class="view-tab active" onclick="switchView('master')">Master</button>
+      <button class="view-tab" onclick="switchView('takt')">Takt Plan</button>
+      <button class="view-tab" onclick="switchView('lps')">LPS / PPC</button>
+      <button class="view-tab" onclick="switchView('lbs')">Location Flow</button>
+    </div>
+  </div>
+</header>
+
+<div class="main-layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Project Stats</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value">22</div>
+          <div class="stat-label">Phases</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">6</div>
+          <div class="stat-label">Res. Blocks</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">1888</div>
+          <div class="stat-label">Days Total</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">2030</div>
+          <div class="stat-label">End Year</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Phases — C54</div>
+      <div id="phase-list-c54"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Phases — C54A</div>
+      <div id="phase-list-c54a"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">Work Type Legend</div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-prelim)"></div><span class="legend-label">Preliminary / Setup</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-substructure)"></div><span class="legend-label">Sub-Structure</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-superstructure)"></div><span class="legend-label">Super-Structure</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-archi)"></div><span class="legend-label">Architectural Finishes</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-mep)"></div><span class="legend-label">M&amp;E / Services</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-finishing)"></div><span class="legend-label">Finishing / External</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--c-handover)"></div><span class="legend-label">Inspections / Handover</span></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-title">LPS Constraint Types</div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--purple);opacity:0.6"></div><span class="legend-label">Material</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--orange);opacity:0.6"></div><span class="legend-label">Labour</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--red);opacity:0.6"></div><span class="legend-label">Access / Sequence</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--accent2);opacity:0.6"></div><span class="legend-label">Info / Approval</span></div>
+      <div class="legend-row"><div class="legend-swatch" style="background:var(--yellow);opacity:0.6"></div><span class="legend-label">External / Authority</span></div>
+    </div>
+  </div>
+
+  <!-- Content Area -->
+  <div class="content" id="contentArea">
+
+    <!-- ── MASTER PROGRAMME ── -->
+    <div id="view-master" class="view-panel active">
+      <div id="gantt-container"></div>
+    </div>
+
+    <!-- ── TAKT PLAN ── -->
+    <div id="view-takt" class="view-panel">
+      <div id="takt-container" style="padding:16px;">
+
+        <!-- Top bar -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+          <div class="section-title" style="margin:0;flex:1;">Takt Plan — All Residential Blocks</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">VIEW</span>
+            <div class="ts-tabs">
+              <button class="ts-btn active" id="taktViewAll" onclick="setTaktView('all')">All Blocks</button>
+              <button class="ts-btn" id="taktViewSingle" onclick="setTaktView('single')">Single Block</button>
+            </div>
+          </div>
+          <div id="taktBlockSelector" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+        </div>
+
+        <!-- Trade legend -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:6px;">
+          <span style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;align-self:center;">TRADES</span>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;" id="tradeLegend"></div>
+          <div style="margin-left:auto;display:flex;gap:10px;align-items:center;">
+            <div style="display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;border-radius:50%;background:var(--red);"></div><span style="font-size:10px;color:var(--text-dim);">Bottleneck</span></div>
+            <div style="display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;border-radius:2px;background:rgba(37,99,235,0.3);border:1px solid var(--accent2);"></div><span style="font-size:10px;color:var(--text-dim);">Current Week</span></div>
+          </div>
+        </div>
+
+        <!-- Takt grid output -->
+        <div id="taktGridWrapper" style="overflow-x:auto;"></div>
+
+        <!-- Info bar -->
+        <div style="margin-top:14px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:8px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px 24px;">
+          <div style="font-size:11.5px;color:var(--text);"><span style="color:var(--accent2);font-weight:600;">Takt Time = 7 days</span> per zone per floor level</div>
+          <div style="font-size:11.5px;color:var(--text);"><span style="color:var(--accent2);font-weight:600;">6 Trade Trains</span> flowing diagonally through all floors</div>
+          <div style="font-size:11.5px;color:var(--text);"><span style="color:var(--accent2);font-weight:600;">Buffer = 1 week</span> between Structural → Archi handover</div>
+          <div style="font-size:11.5px;color:var(--text);"><span style="color:var(--yellow);font-weight:600;">⚠ Bottleneck</span> = ME-1F &amp; BRICK sharing same week on same floor</div>
+          <div style="font-size:11.5px;color:var(--text);"><span style="color:var(--green);font-weight:600;">PPC Target ≥ 80%</span> for stable continuous flow</div>
+          <div style="font-size:11.5px;color:var(--text);"><span style="color:var(--accent2);font-weight:600;">4-Week Look-Ahead</span> constraint removal drives reliable promises</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LPS / PPC ── -->
+    <div id="view-lps" class="view-panel">
+      <div id="lps-container">
+        <div class="section-title">Last Planner System — Weekly Work Plan & PPC</div>
+        <div class="ppc-chart-area">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:600;color:var(--text-bright);">Percent Plan Complete (PPC) — Rolling 6 Weeks</div>
+              <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Target: ≥ 80% | Tracking from Week 40 (2025)</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:var(--green);">74%</div>
+              <div style="font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;">CURRENT WEEK AVG</div>
+            </div>
+          </div>
+          <div class="ppc-bars" id="ppcBars"></div>
+        </div>
+        <div class="lps-week-view" id="lpsWeekView"></div>
+        <div class="lps-constraints-section">
+          <div class="section-title" style="font-size:13px;">Active Constraint Log</div>
+          <div id="constraintLog"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── LOCATION-BASED ── -->
+    <div id="view-lbs" class="view-panel">
+      <div id="lbs-container" style="padding:16px;">
+
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap;">
+          <div class="section-title" style="margin:0;flex:1;">Location-Based Schedule — All Blocks</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;" id="lbsBlockFilter"></div>
+        </div>
+        <p style="font-size:11px;color:var(--text-dim);margin-bottom:14px;">Each row = one location (floor level). Colour bands show which trade train occupies that zone in each week. Read diagonally top-right for flow. <span style="color:var(--red);">Red</span> = bottleneck / zero buffer.</p>
+
+        <!-- Tab selector for view type -->
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+          <div class="ts-tabs">
+            <button class="ts-btn active" onclick="setLBSTab('flow')">Flow Lines</button>
+            <button class="ts-btn" onclick="setLBSTab('table')">Trade Table</button>
+          </div>
+        </div>
+
+        <div id="lbsContent"></div>
+
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /layout -->
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ══════════════════════════════════════════════
+//  DATA
+// ══════════════════════════════════════════════
+
+const PROJECT_START = new Date('2024-05-31');
+const PROJECT_END   = new Date('2030-08-12');
+const TODAY         = new Date('2025-06-04');
+
+function d(s) { return new Date(s); }
+
+const PHASES = [
+  { id:'p01', label:'Phase 1 – ESS 1 Blk 140B MSCP', start:d('2024-11-01'), end:d('2027-12-27'), ocd:d('2028-03-20'), plot:'C54', color:'#0369a1' },
+  { id:'p02', label:'Phase 2 – ESS 2 Blk 142',       start:d('2025-09-22'), end:d('2027-12-27'), ocd:d('2028-03-20'), plot:'C54', color:'#0369a1' },
+  { id:'p03', label:'Phase 3 – MDF Room Blk 140 MSCP',start:d('2026-02-02'), end:d('2027-07-02'), ocd:d('2028-03-20'), plot:'C54', color:'#0369a1' },
+  { id:'p04', label:'Phase 4 – Minor Sewer C54',      start:d('2024-09-25'), end:d('2028-03-07'), ocd:d('2028-07-20'), plot:'C54', color:'#14b8a6' },
+  { id:'p05', label:'Phase 5 – Detention Tank C54',   start:d('2024-08-15'), end:d('2028-02-04'), ocd:d('2028-07-20'), plot:'C54', color:'#14b8a6' },
+  { id:'p06', label:'Phase 6 – Blk 140 MSCP',        start:d('2024-07-22'), end:d('2028-08-21'), ocd:d('2028-09-20'), plot:'C54', color:'#2563eb' },
+  { id:'p07', label:'Phase 7 – Blk 140 MSCP Roof',   start:d('2027-01-07'), end:d('2028-09-20'), ocd:d('2028-10-20'), plot:'C54', color:'#7c3aed' },
+  { id:'p08', label:'Phase 8 – Blk 140 RC / Shops',  start:d('2026-09-16'), end:d('2028-09-20'), ocd:d('2028-10-20'), plot:'C54', color:'#7c3aed' },
+  { id:'p09', label:'Phase 9 – Covered Linkway',      start:d('2027-01-15'), end:d('2028-09-20'), ocd:d('2028-10-20'), plot:'C54', color:'#059669' },
+  { id:'p10', label:'Phase 10 – Blk 140A',            start:d('2024-05-31'), end:d('2028-09-21'), ocd:d('2028-10-20'), plot:'C54', color:'#2563eb' },
+  { id:'p11', label:'Phase 11 – Blk 142',             start:d('2026-09-02'), end:d('2028-09-16'), ocd:d('2028-10-20'), plot:'C54', color:'#2563eb' },
+  { id:'p12', label:'Phase 12 – Blk 139 Childcare',  start:d('2026-01-29'), end:d('2028-10-26'), ocd:d('2028-11-20'), plot:'C54', color:'#059669' },
+  { id:'p13', label:'Phase 13 – Blk 140B',            start:d('2024-05-31'), end:d('2028-10-24'), ocd:d('2028-11-20'), plot:'C54', color:'#2563eb' },
+  { id:'p14', label:'Phase 14 – Blk 140C',            start:d('2024-06-21'), end:d('2028-12-02'), ocd:d('2028-12-20'), plot:'C54', color:'#2563eb' },
+  { id:'p15', label:'Phase 15 – Blk 141 PP3',         start:d('2025-10-08'), end:d('2028-11-20'), ocd:d('2028-12-20'), plot:'C54', color:'#059669' },
+  { id:'p16', label:'Phase 16 – MDF Room Blk 138A',  start:d('2026-12-16'), end:d('2028-08-03'), ocd:d('2029-07-20'), plot:'C54A', color:'#0369a1' },
+  { id:'p17', label:'Phase 17 – Minor Sewer C54A',   start:d('2026-10-01'), end:d('2029-08-23'), ocd:d('2029-10-20'), plot:'C54A', color:'#14b8a6' },
+  { id:'p18', label:'Phase 18 – Detention Tank C54A', start:d('2026-02-03'), end:d('2029-07-10'), ocd:d('2029-10-20'), plot:'C54A', color:'#14b8a6' },
+  { id:'p19', label:'Phase 19 – Blk 138B',            start:d('2024-05-31'), end:d('2029-12-22'), ocd:d('2030-01-20'), plot:'C54A', color:'#be185d' },
+  { id:'p20', label:'Phase 20 – Blk 138A',            start:d('2024-05-31'), end:d('2030-02-16'), ocd:d('2030-03-20'), plot:'C54A', color:'#be185d' },
+  { id:'p21', label:'Phase 21 – Balance Site C54A',  start:d('2026-04-21'), end:d('2030-05-28'), ocd:d('2030-05-20'), plot:'C54A', color:'#059669' },
+  { id:'p22', label:'Phase 22 – External Linkway',   start:d('2025-08-20'), end:d('2030-07-10'), ocd:d('2030-08-20'), plot:'C54A', color:'#64748b' },
+];
+
+// Key tasks for Gantt (subset for display)
+const TASKS = [
+  // Level 0 - summary
+  { id:1, level:0, name:'BMC54 & 54A MASTER PROGRAMME', start:d('2024-05-31'), end:d('2030-08-12'), type:'summary', color:'#334155' },
+  { id:2, level:1, name:'KEY DATES / MILESTONES', start:d('2024-05-31'), end:d('2030-07-10'), type:'summary', color:'#1e40af' },
+  { id:3, level:2, name:'Letter of Acceptance', start:d('2024-05-31'), end:d('2024-05-31'), type:'milestone', color:'' },
+  { id:4, level:2, name:'Site Possession', start:d('2024-06-21'), end:d('2024-06-21'), type:'milestone', color:'' },
+  ...PHASES.map((p,i) => ({ id:100+i, level:2, name:'OCD: '+p.label.split('–')[1].trim(), start:p.ocd, end:p.ocd, type:'milestone', color:'' })).slice(0,5),
+
+  { id:50, level:0, name:'PRELIMINARY WORKS', start:d('2024-06-21'), end:d('2030-05-28'), type:'summary', color:'#334155' },
+  { id:51, level:1, name:'Authority Submissions & Clearances', start:d('2024-06-22'), end:d('2024-12-28'), type:'task', color:'var(--c-prelim)' },
+  { id:52, level:1, name:'Site Facilities Setup (C54)', start:d('2024-06-22'), end:d('2024-12-13'), type:'task', color:'var(--c-prelim)' },
+  { id:53, level:1, name:'Tower Cranes — TC1 to TC7', start:d('2024-11-25'), end:d('2029-04-24'), type:'task', color:'#475569' },
+  { id:54, level:1, name:'VDC Execution Plan', start:d('2025-09-24'), end:d('2030-05-28'), type:'task', color:'#0891b2' },
+  { id:55, level:1, name:'Site Mobilisation C54A', start:d('2025-08-20'), end:d('2026-02-03'), type:'task', color:'var(--c-prelim)' },
+
+  { id:200, level:0, name:'INFRASTRUCTURE / UTILITIES', start:d('2024-08-15'), end:d('2030-07-10'), type:'summary', color:'#334155' },
+  { id:201, level:1, name:'Phase 4 – Minor Sewer C54', start:d('2024-09-25'), end:d('2028-03-07'), type:'task', color:PHASES[3].color },
+  { id:202, level:1, name:'Phase 5 – Detention Tanks C54', start:d('2024-08-15'), end:d('2028-02-04'), type:'task', color:PHASES[4].color },
+  { id:203, level:1, name:'Phase 17 – Minor Sewer C54A', start:d('2026-10-01'), end:d('2029-08-23'), type:'task', color:PHASES[16].color },
+  { id:204, level:1, name:'Phase 18 – Detention Tank C54A', start:d('2026-02-03'), end:d('2029-07-10'), type:'task', color:PHASES[17].color },
+
+  { id:300, level:0, name:'ESS / UTILITIES BUILDINGS', start:d('2024-11-01'), end:d('2027-12-27'), type:'summary', color:'#334155' },
+  { id:301, level:1, name:'Phase 1 – ESS 1 @ Blk 140B MSCP', start:d('2024-11-01'), end:d('2027-12-27'), type:'task', color:PHASES[0].color },
+  { id:302, level:1, name:'Phase 2 – ESS 2 @ Blk 142', start:d('2025-09-22'), end:d('2027-12-27'), type:'task', color:PHASES[1].color },
+  { id:303, level:1, name:'Phase 3 – MDF Room @ Blk 140 MSCP', start:d('2026-02-02'), end:d('2027-07-02'), type:'task', color:PHASES[2].color },
+  { id:304, level:1, name:'Phase 16 – MDF Room @ Blk 138A', start:d('2026-12-16'), end:d('2028-08-03'), type:'task', color:PHASES[15].color },
+
+  { id:400, level:0, name:'BLOCK 140 MSCP', start:d('2024-07-22'), end:d('2028-09-20'), type:'summary', color:'#334155' },
+  { id:401, level:1, name:'Bored Piling', start:d('2024-07-22'), end:d('2025-03-14'), type:'task', color:'var(--c-substructure)' },
+  { id:402, level:1, name:'Excavation & Sub-Structure', start:d('2024-12-28'), end:d('2025-09-15'), type:'task', color:'var(--c-substructure)' },
+  { id:403, level:1, name:'Super-Structure (Deck 2A–10B)', start:d('2025-10-03'), end:d('2027-02-22'), type:'task', color:'var(--c-superstructure)' },
+  { id:404, level:1, name:'Architectural Finishes (L1–L10)', start:d('2025-12-11'), end:d('2028-02-15'), type:'task', color:'var(--c-archi)' },
+  { id:405, level:1, name:'M&E Works', start:d('2025-01-08'), end:d('2028-04-22'), type:'task', color:'var(--c-mep)' },
+  { id:406, level:1, name:'Inspections & Handover', start:d('2028-04-03'), end:d('2028-09-20'), type:'task', color:'var(--c-handover)' },
+
+  { id:500, level:0, name:'BLOCK 140A', start:d('2024-05-31'), end:d('2028-09-21'), type:'summary', color:'#334155' },
+  { id:501, level:1, name:'Bored Piling → Sub-structure', start:d('2024-05-31'), end:d('2025-08-21'), type:'task', color:'var(--c-substructure)' },
+  { id:502, level:1, name:'Super-Structure (Typ. Floors)', start:d('2025-09-18'), end:d('2027-03-15'), type:'task', color:'var(--c-superstructure)' },
+  { id:503, level:1, name:'Architectural Finishes', start:d('2026-03-11'), end:d('2028-04-15'), type:'task', color:'var(--c-archi)' },
+  { id:504, level:1, name:'M&E / Fire Protection', start:d('2024-05-31'), end:d('2028-05-02'), type:'task', color:'var(--c-mep)' },
+  { id:505, level:1, name:'Handover / OCD: Oct-28', start:d('2028-04-13'), end:d('2028-09-21'), type:'task', color:'var(--c-handover)' },
+
+  { id:600, level:0, name:'BLOCK 140B', start:d('2024-05-31'), end:d('2028-10-24'), type:'summary', color:'#334155' },
+  { id:601, level:1, name:'Piling & Sub-structure', start:d('2024-05-31'), end:d('2025-11-01'), type:'task', color:'var(--c-substructure)' },
+  { id:602, level:1, name:'Super-Structure', start:d('2025-11-01'), end:d('2027-01-15'), type:'task', color:'var(--c-superstructure)' },
+  { id:603, level:1, name:'Architectural Finishes', start:d('2026-06-01'), end:d('2028-05-01'), type:'task', color:'var(--c-archi)' },
+  { id:604, level:1, name:'M&E / Services', start:d('2025-05-01'), end:d('2028-06-01'), type:'task', color:'var(--c-mep)' },
+  { id:605, level:1, name:'Handover / OCD: Nov-28', start:d('2028-05-01'), end:d('2028-10-24'), type:'task', color:'var(--c-handover)' },
+
+  { id:700, level:0, name:'BLOCK 140C', start:d('2024-06-21'), end:d('2028-12-02'), type:'summary', color:'#334155' },
+  { id:701, level:1, name:'Piling & Sub-structure', start:d('2024-06-21'), end:d('2025-12-01'), type:'task', color:'var(--c-substructure)' },
+  { id:702, level:1, name:'Super-Structure', start:d('2025-12-01'), end:d('2027-03-01'), type:'task', color:'var(--c-superstructure)' },
+  { id:703, level:1, name:'Architectural Finishes', start:d('2026-10-01'), end:d('2028-06-01'), type:'task', color:'var(--c-archi)' },
+  { id:704, level:1, name:'M&E / Services', start:d('2025-08-01'), end:d('2028-07-01'), type:'task', color:'var(--c-mep)' },
+  { id:705, level:1, name:'Handover / OCD: Dec-28', start:d('2028-06-01'), end:d('2028-12-02'), type:'task', color:'var(--c-handover)' },
+
+  { id:800, level:0, name:'BLOCK 138A (C54A)', start:d('2024-05-31'), end:d('2030-02-16'), type:'summary', color:'#334155' },
+  { id:801, level:1, name:'Piling & Sub-structure', start:d('2024-05-31'), end:d('2027-01-01'), type:'task', color:'var(--c-substructure)' },
+  { id:802, level:1, name:'Super-Structure', start:d('2026-12-01'), end:d('2028-06-01'), type:'task', color:'var(--c-superstructure)' },
+  { id:803, level:1, name:'Architectural Finishes', start:d('2027-09-01'), end:d('2029-08-01'), type:'task', color:'var(--c-archi)' },
+  { id:804, level:1, name:'M&E / Services', start:d('2027-03-01'), end:d('2029-10-01'), type:'task', color:'var(--c-mep)' },
+  { id:805, level:1, name:'Handover / OCD: Mar-30', start:d('2029-10-01'), end:d('2030-02-16'), type:'task', color:'var(--c-handover)' },
+
+  { id:900, level:0, name:'BLOCK 138B (C54A)', start:d('2024-05-31'), end:d('2029-12-22'), type:'summary', color:'#334155' },
+  { id:901, level:1, name:'Piling & Sub-structure', start:d('2024-05-31'), end:d('2027-03-01'), type:'task', color:'var(--c-substructure)' },
+  { id:902, level:1, name:'Super-Structure', start:d('2027-03-01'), end:d('2028-09-01'), type:'task', color:'var(--c-superstructure)' },
+  { id:903, level:1, name:'Architectural Finishes', start:d('2028-01-01'), end:d('2029-08-01'), type:'task', color:'var(--c-archi)' },
+  { id:904, level:1, name:'M&E / Services', start:d('2027-09-01'), end:d('2029-09-01'), type:'task', color:'var(--c-mep)' },
+  { id:905, level:1, name:'Handover / OCD: Jan-30', start:d('2029-09-01'), end:d('2029-12-22'), type:'task', color:'var(--c-handover)' },
+
+  { id:1000, level:0, name:'COMMUNITY / AMENITY WORKS', start:d('2026-01-29'), end:d('2030-07-10'), type:'summary', color:'#334155' },
+  { id:1001, level:1, name:'Phase 7 – MSCP Roof Garden', start:d('2027-01-07'), end:d('2028-09-20'), type:'task', color:PHASES[6].color },
+  { id:1002, level:1, name:'Phase 8 – Shops / Eating House', start:d('2026-09-16'), end:d('2028-09-20'), type:'task', color:PHASES[7].color },
+  { id:1003, level:1, name:'Phase 9 – External Linkway C54', start:d('2027-01-15'), end:d('2028-09-20'), type:'task', color:PHASES[8].color },
+  { id:1004, level:1, name:'Phase 12 – Childcare / PP2', start:d('2026-01-29'), end:d('2028-10-26'), type:'task', color:PHASES[11].color },
+  { id:1005, level:1, name:'Phase 15 – Blk 141 PP3 + Site', start:d('2025-10-08'), end:d('2028-11-20'), type:'task', color:PHASES[14].color },
+  { id:1006, level:1, name:'Phase 21 – Balance C54A', start:d('2026-04-21'), end:d('2030-05-28'), type:'task', color:PHASES[20].color },
+  { id:1007, level:1, name:'Phase 22 – External Linkways', start:d('2025-08-20'), end:d('2030-07-10'), type:'task', color:PHASES[21].color },
+];
+
+// Takt data by block
+const BLOCKS = [
+  {
+    id:'140A', label:'Blk 140A', levels:25, color:'#2563eb',
+    taktTime:7,
+    trades:[
+      { name:'Structural / Formwork', short:'STRUCT', color:'#7c3aed', startWeek:0, durWeeks:1 },
+      { name:'M&E 1st Fix', short:'ME-1F',  color:'#0891b2', startWeek:1, durWeeks:1 },
+      { name:'Brick / Plastering', short:'BRICK',  color:'#059669', startWeek:1, durWeeks:1 },
+      { name:'Architectural 2nd Fix', short:'ARCHI', color:'#d97706', startWeek:2, durWeeks:1 },
+      { name:'M&E Final Fix', short:'ME-FF', color:'#f59e0b', startWeek:3, durWeeks:1 },
+      { name:'Painting / Finishing', short:'PAINT', color:'#be185d', startWeek:3, durWeeks:1 },
+    ],
+    startDate: d('2025-09-18')
+  },
+  {
+    id:'140B', label:'Blk 140B', levels:22, color:'#7c3aed',
+    taktTime:7,
+    trades:[
+      { name:'Structural / Formwork', short:'STRUCT', color:'#7c3aed', startWeek:0, durWeeks:1 },
+      { name:'M&E 1st Fix', short:'ME-1F',  color:'#0891b2', startWeek:1, durWeeks:1 },
+      { name:'Brick / Plastering', short:'BRICK',  color:'#059669', startWeek:1, durWeeks:1 },
+      { name:'Architectural 2nd Fix', short:'ARCHI', color:'#d97706', startWeek:2, durWeeks:1 },
+      { name:'M&E Final Fix', short:'ME-FF', color:'#f59e0b', startWeek:3, durWeeks:1 },
+      { name:'Painting / Finishing', short:'PAINT', color:'#be185d', startWeek:3, durWeeks:1 },
+    ],
+    startDate: d('2025-11-01')
+  },
+  {
+    id:'140C', label:'Blk 140C', levels:24, color:'#059669',
+    taktTime:7,
+    trades:[
+      { name:'Structural / Formwork', short:'STRUCT', color:'#7c3aed', startWeek:0, durWeeks:1 },
+      { name:'M&E 1st Fix', short:'ME-1F',  color:'#0891b2', startWeek:1, durWeeks:1 },
+      { name:'Brick / Plastering', short:'BRICK',  color:'#059669', startWeek:1, durWeeks:1 },
+      { name:'Architectural 2nd Fix', short:'ARCHI', color:'#d97706', startWeek:2, durWeeks:1 },
+      { name:'M&E Final Fix', short:'ME-FF', color:'#f59e0b', startWeek:3, durWeeks:1 },
+      { name:'Painting / Finishing', short:'PAINT', color:'#be185d', startWeek:3, durWeeks:1 },
+    ],
+    startDate: d('2025-12-01')
+  },
+  {
+    id:'138A', label:'Blk 138A', levels:26, color:'#be185d',
+    taktTime:7,
+    trades:[
+      { name:'Structural / Formwork', short:'STRUCT', color:'#7c3aed', startWeek:0, durWeeks:1 },
+      { name:'M&E 1st Fix', short:'ME-1F',  color:'#0891b2', startWeek:1, durWeeks:1 },
+      { name:'Brick / Plastering', short:'BRICK',  color:'#059669', startWeek:1, durWeeks:1 },
+      { name:'Architectural 2nd Fix', short:'ARCHI', color:'#d97706', startWeek:2, durWeeks:1 },
+      { name:'M&E Final Fix', short:'ME-FF', color:'#f59e0b', startWeek:3, durWeeks:1 },
+      { name:'Painting / Finishing', short:'PAINT', color:'#be185d', startWeek:3, durWeeks:1 },
+    ],
+    startDate: d('2026-12-01')
+  },
+  {
+    id:'138B', label:'Blk 138B', levels:24, color:'#f97316',
+    taktTime:7,
+    trades:[
+      { name:'Structural / Formwork', short:'STRUCT', color:'#7c3aed', startWeek:0, durWeeks:1 },
+      { name:'M&E 1st Fix', short:'ME-1F',  color:'#0891b2', startWeek:1, durWeeks:1 },
+      { name:'Brick / Plastering', short:'BRICK',  color:'#059669', startWeek:1, durWeeks:1 },
+      { name:'Architectural 2nd Fix', short:'ARCHI', color:'#d97706', startWeek:2, durWeeks:1 },
+      { name:'M&E Final Fix', short:'ME-FF', color:'#f59e0b', startWeek:3, durWeeks:1 },
+      { name:'Painting / Finishing', short:'PAINT', color:'#be185d', startWeek:3, durWeeks:1 },
+    ],
+    startDate: d('2027-03-01')
+  },
+];
+
+// LPS Weeks
+const LPS_WEEKS = [
+  { week:'W40/25', ppc:68, tasks:[
+    { name:'Formwork Deck A / Blk 140A L12', who:'Structural Crew A', status:'completed' },
+    { name:'Rebar Blk 140A L12', who:'RC Crew', status:'completed' },
+    { name:'M&E 1st Fix L8 / Blk 140B', who:'M&E Sub', status:'constraint' },
+    { name:'Brick Wall L6 / Blk 140C', who:'Arch Crew B', status:'committed' },
+    { name:'Plastering L5 / Blk 140A', who:'Arch Crew A', status:'completed' },
+  ]},
+  { week:'W41/25', ppc:72, tasks:[
+    { name:'Concreting Deck Blk 140A L13', who:'Structural Crew A', status:'completed' },
+    { name:'M&E 1st Fix L9 / Blk 140B', who:'M&E Sub', status:'completed' },
+    { name:'Door Frames L7 / Blk 140C', who:'Arch Crew C', status:'constraint' },
+    { name:'Plastering L6 / Blk 140A', who:'Arch Crew A', status:'committed' },
+    { name:'Painting L4 / Blk 140B', who:'Painting Sub', status:'completed' },
+  ]},
+  { week:'W42/25', ppc:78, tasks:[
+    { name:'Formwork Blk 140B L11', who:'Structural Crew B', status:'completed' },
+    { name:'Rebar Blk 140C L10', who:'RC Crew', status:'completed' },
+    { name:'M&E 2nd Fix L6 / Blk 140A', who:'M&E Sub', status:'committed' },
+    { name:'Tiling L5 / Blk 140B', who:'Arch Crew B', status:'completed' },
+    { name:'External Plaster L3 / Blk 140C', who:'Arch Crew C', status:'committed' },
+  ]},
+  { week:'W43/25', ppc:65, tasks:[
+    { name:'Concrete Blk 140C L11', who:'Structural Crew A', status:'completed' },
+    { name:'Brick Wall L8 / Blk 140A', who:'Arch Crew A', status:'constraint' },
+    { name:'M&E Final Fix L4 / Blk 140B', who:'M&E Sub', status:'committed' },
+    { name:'Painting L3 / Blk 140A', who:'Painting Sub', status:'constraint' },
+    { name:'Wet Trade L7 / Blk 140C', who:'Arch Crew B', status:'committed' },
+  ]},
+  { week:'W44/25', ppc:80, tasks:[
+    { name:'Formwork Blk 140A L14', who:'Structural Crew A', status:'committed' },
+    { name:'M&E 1st Fix L10 / Blk 140C', who:'M&E Sub', status:'committed' },
+    { name:'Brick Wall L9 / Blk 140B', who:'Arch Crew C', status:'committed' },
+    { name:'Plastering L7 / Blk 140A', who:'Arch Crew A', status:'committed' },
+    { name:'Painting L5 / Blk 140C', who:'Painting Sub', status:'committed' },
+  ]},
+  { week:'W45/25', ppc:75, tasks:[
+    { name:'Rebar Blk 140B L12', who:'RC Crew', status:'committed' },
+    { name:'M&E 2nd Fix L8 / Blk 140A', who:'M&E Sub', status:'committed' },
+    { name:'Door Frames L9 / Blk 140C', who:'Arch Crew B', status:'committed' },
+    { name:'Floor Tiling L6 / Blk 140B', who:'Arch Crew A', status:'committed' },
+    { name:'External Paint L4 / Blk 140A', who:'Painting Sub', status:'committed' },
+  ]},
+];
+
+// Constraints
+const CONSTRAINTS = [
+  { type:'c-info',     label:'INFO',     task:'Authority clearance for TC-6 erection', block:'Blk 138A', due:'W40/25', status:'open' },
+  { type:'c-material', label:'MATERIAL', task:'Precast panel delivery for Blk 140C L11', block:'Blk 140C', due:'W41/25', status:'open' },
+  { type:'c-external', label:'EXTERNAL', task:'SP Services ESS energisation approval', block:'ESS-1', due:'W45/25', status:'open' },
+  { type:'c-access',   label:'ACCESS',   task:'Hoist PH3 handover for upper floor access', block:'Blk 140B', due:'W42/25', status:'resolved' },
+  { type:'c-labor',    label:'LABOUR',   task:'Waterproofing crew availability for roof slab', block:'Blk 140B', due:'W43/25', status:'open' },
+  { type:'c-info',     label:'INFO',     task:'IDD shop drawing approval — toilet layouts', block:'Blk 140A', due:'W42/25', status:'resolved' },
+  { type:'c-material', label:'MATERIAL', task:'Lift component delivery — Mitsubishi', block:'MSCP', due:'W44/25', status:'open' },
+  { type:'c-external', label:'EXTERNAL', task:'PUB clearance for sewer connection MH11', block:'Phase 4', due:'W46/25', status:'open' },
+];
+
+// ── Comprehensive location-based data for all 5 blocks ──
+const LBS_BLOCKS = [
+  {
+    id:'140A', label:'Blk 140A', color:'#2563eb', ocd:'Oct-28', plot:'C54',
+    levels: 25, superStart: d('2025-09-18'), takt: 7,
+    trades:[
+      { short:'STRUCT', name:'Structural/Formwork', color:'#7c3aed', offset:0 },
+      { short:'ME-1F',  name:'M&E 1st Fix',         color:'#0891b2', offset:1 },
+      { short:'BRICK',  name:'Brickwork/Plaster',   color:'#059669', offset:1 },
+      { short:'ARCHI',  name:'Archi 2nd Fix',        color:'#d97706', offset:2 },
+      { short:'ME-FF',  name:'M&E Final Fix',        color:'#f59e0b', offset:3 },
+      { short:'PAINT',  name:'Painting/Finishing',   color:'#be185d', offset:3 },
+    ],
+    floorData: Array.from({length:25},(_,i)=>({
+      floor: i+2,
+      rate: 7,
+      crew:{ STRUCT:12, 'ME-1F':5, BRICK:8, ARCHI:7, 'ME-FF':5, PAINT:6 },
+      buffer: i<3?0:1,
+    }))
+  },
+  {
+    id:'140B', label:'Blk 140B', color:'#7c3aed', ocd:'Nov-28', plot:'C54',
+    levels: 22, superStart: d('2025-11-01'), takt: 7,
+    trades:[
+      { short:'STRUCT', name:'Structural/Formwork', color:'#7c3aed', offset:0 },
+      { short:'ME-1F',  name:'M&E 1st Fix',         color:'#0891b2', offset:1 },
+      { short:'BRICK',  name:'Brickwork/Plaster',   color:'#059669', offset:1 },
+      { short:'ARCHI',  name:'Archi 2nd Fix',        color:'#d97706', offset:2 },
+      { short:'ME-FF',  name:'M&E Final Fix',        color:'#f59e0b', offset:3 },
+      { short:'PAINT',  name:'Painting/Finishing',   color:'#be185d', offset:3 },
+    ],
+    floorData: Array.from({length:22},(_,i)=>({
+      floor: i+2,
+      rate: 7,
+      crew:{ STRUCT:11, 'ME-1F':5, BRICK:8, ARCHI:7, 'ME-FF':5, PAINT:6 },
+      buffer: i===0?0:1,
+    }))
+  },
+  {
+    id:'140C', label:'Blk 140C', color:'#059669', ocd:'Dec-28', plot:'C54',
+    levels: 24, superStart: d('2025-12-01'), takt: 7,
+    trades:[
+      { short:'STRUCT', name:'Structural/Formwork', color:'#7c3aed', offset:0 },
+      { short:'ME-1F',  name:'M&E 1st Fix',         color:'#0891b2', offset:1 },
+      { short:'BRICK',  name:'Brickwork/Plaster',   color:'#059669', offset:1 },
+      { short:'ARCHI',  name:'Archi 2nd Fix',        color:'#d97706', offset:2 },
+      { short:'ME-FF',  name:'M&E Final Fix',        color:'#f59e0b', offset:3 },
+      { short:'PAINT',  name:'Painting/Finishing',   color:'#be185d', offset:3 },
+    ],
+    floorData: Array.from({length:24},(_,i)=>({
+      floor: i+2,
+      rate: 7,
+      crew:{ STRUCT:11, 'ME-1F':5, BRICK:7, ARCHI:7, 'ME-FF':5, PAINT:6 },
+      buffer: 1,
+    }))
+  },
+  {
+    id:'138A', label:'Blk 138A', color:'#be185d', ocd:'Mar-30', plot:'C54A',
+    levels: 26, superStart: d('2026-12-01'), takt: 7,
+    trades:[
+      { short:'STRUCT', name:'Structural/Formwork', color:'#7c3aed', offset:0 },
+      { short:'ME-1F',  name:'M&E 1st Fix',         color:'#0891b2', offset:1 },
+      { short:'BRICK',  name:'Brickwork/Plaster',   color:'#059669', offset:1 },
+      { short:'ARCHI',  name:'Archi 2nd Fix',        color:'#d97706', offset:2 },
+      { short:'ME-FF',  name:'M&E Final Fix',        color:'#f59e0b', offset:3 },
+      { short:'PAINT',  name:'Painting/Finishing',   color:'#be185d', offset:3 },
+    ],
+    floorData: Array.from({length:26},(_,i)=>({
+      floor: i+2,
+      rate: 7,
+      crew:{ STRUCT:12, 'ME-1F':5, BRICK:8, ARCHI:7, 'ME-FF':5, PAINT:6 },
+      buffer: 1,
+    }))
+  },
+  {
+    id:'138B', label:'Blk 138B', color:'#f97316', ocd:'Jan-30', plot:'C54A',
+    levels: 24, superStart: d('2027-03-01'), takt: 7,
+    trades:[
+      { short:'STRUCT', name:'Structural/Formwork', color:'#7c3aed', offset:0 },
+      { short:'ME-1F',  name:'M&E 1st Fix',         color:'#0891b2', offset:1 },
+      { short:'BRICK',  name:'Brickwork/Plaster',   color:'#059669', offset:1 },
+      { short:'ARCHI',  name:'Archi 2nd Fix',        color:'#d97706', offset:2 },
+      { short:'ME-FF',  name:'M&E Final Fix',        color:'#f59e0b', offset:3 },
+      { short:'PAINT',  name:'Painting/Finishing',   color:'#be185d', offset:3 },
+    ],
+    floorData: Array.from({length:24},(_,i)=>({
+      floor: i+2,
+      rate: 7,
+      crew:{ STRUCT:11, 'ME-1F':5, BRICK:7, ARCHI:7, 'ME-FF':5, PAINT:6 },
+      buffer: i<2?0:1,
+    }))
+  },
+];
+
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+
+let currentView = 'master';
+let timescale = 'quarter';
+let selectedBlock = '140A';
+let taktView = 'all';       // 'all' | 'single'
+let lbsFilterBlock = 'all'; // block id or 'all'
+let lbsTab = 'flow';        // 'flow' | 'table'
+
+// px width of one day at each timescale
+const TS_DAY_PX = {
+  week:    14,
+  month:    4,
+  quarter:  1.6,
+  half:     0.85,
+  year:     0.45,
+};
+
+// ══════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════
+
+function daysBetween(a, b) {
+  return (b - a) / (1000 * 60 * 60 * 24);
+}
+
+function totalProjectDays() {
+  return daysBetween(PROJECT_START, PROJECT_END);
+}
+
+function dateToPx(d) {
+  const days = daysBetween(PROJECT_START, d);
+  return Math.max(0, days * TS_DAY_PX[timescale]);
+}
+
+function totalPx() {
+  return totalProjectDays() * TS_DAY_PX[timescale];
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'2-digit' });
+}
+
+function isoWeek(d) {
+  const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = tmp.getUTCDay() || 7;
+  tmp.setUTCDate(tmp.getUTCDate() + 4 - dayNum);
+  const yr = tmp.getUTCFullYear();
+  const wk = Math.ceil(((tmp - new Date(Date.UTC(yr,0,1)))/86400000 + 1) / 7);
+  return { yr, wk };
+}
+
+// ── Generate header ticks for chosen timescale ──
+function buildTimeTicks() {
+  // Returns array of { label, startDate, endDate, px, subLabel? }
+  const ticks = [];
+  const DAY = 86400000;
+
+  if (timescale === 'week') {
+    // Row1 = Months, Row2 = Weeks
+    let cur = new Date(PROJECT_START);
+    // align to Monday
+    const dow = cur.getDay();
+    if (dow !== 1) cur.setDate(cur.getDate() + (dow === 0 ? 1 : 8 - dow));
+
+    while (cur <= PROJECT_END) {
+      const end = new Date(cur.getTime() + 7 * DAY);
+      const { yr, wk } = isoWeek(cur);
+      ticks.push({
+        label: `W${wk}`,
+        sub:   cur.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),
+        start: new Date(cur), end,
+        px: dateToPx(cur),
+        w: 7 * TS_DAY_PX[timescale],
+      });
+      cur = end;
+    }
+    return { row1: buildMonthRow(), row2: ticks };
+  }
+
+  if (timescale === 'month') {
+    let yr = PROJECT_START.getFullYear();
+    let mo = PROJECT_START.getMonth();
+    while (true) {
+      const start = new Date(yr, mo, 1);
+      const end   = new Date(yr, mo + 1, 1);
+      if (start > PROJECT_END) break;
+      const days = (end - start) / DAY;
+      ticks.push({
+        label: start.toLocaleDateString('en-GB',{month:'short'}),
+        sub:   String(yr),
+        start, end,
+        px: dateToPx(start),
+        w: days * TS_DAY_PX[timescale],
+      });
+      mo++;
+      if (mo > 11) { mo = 0; yr++; }
+    }
+    return { row1: buildYearRow(), row2: ticks };
+  }
+
+  if (timescale === 'quarter') {
+    let yr = PROJECT_START.getFullYear();
+    let q = Math.floor(PROJECT_START.getMonth() / 3);
+    while (true) {
+      const start = new Date(yr, q * 3, 1);
+      const end   = new Date(yr, q * 3 + 3, 1);
+      if (start > PROJECT_END) break;
+      const days = (end - start) / DAY;
+      ticks.push({
+        label: `Q${q+1}`,
+        sub:   String(yr),
+        start, end,
+        px: dateToPx(start),
+        w: days * TS_DAY_PX[timescale],
+      });
+      q++;
+      if (q > 3) { q = 0; yr++; }
+    }
+    return { row1: buildYearRow(), row2: ticks };
+  }
+
+  if (timescale === 'half') {
+    let yr = PROJECT_START.getFullYear();
+    let h = PROJECT_START.getMonth() < 6 ? 0 : 1;
+    while (true) {
+      const start = new Date(yr, h * 6, 1);
+      const end   = new Date(yr, h * 6 + 6, 1);
+      if (start > PROJECT_END) break;
+      const days = (end - start) / DAY;
+      ticks.push({
+        label: `H${h+1} ${yr}`,
+        sub:   h === 0 ? 'Jan–Jun' : 'Jul–Dec',
+        start, end,
+        px: dateToPx(start),
+        w: days * TS_DAY_PX[timescale],
+      });
+      h++;
+      if (h > 1) { h = 0; yr++; }
+    }
+    return { row1: null, row2: ticks };
+  }
+
+  // year
+  for (let yr = PROJECT_START.getFullYear(); yr <= PROJECT_END.getFullYear(); yr++) {
+    const start = new Date(yr, 0, 1);
+    const end   = new Date(yr + 1, 0, 1);
+    const days  = (end - start) / DAY;
+    ticks.push({
+      label: String(yr),
+      start, end,
+      px: dateToPx(start),
+      w: days * TS_DAY_PX[timescale],
+    });
+  }
+  return { row1: null, row2: ticks };
+}
+
+function buildYearRow() {
+  const row = [];
+  for (let yr = PROJECT_START.getFullYear(); yr <= PROJECT_END.getFullYear(); yr++) {
+    const start = new Date(yr, 0, 1);
+    const end   = new Date(yr + 1, 0, 1);
+    const days  = (end - start.getTime()) / 86400000;
+    row.push({ label: String(yr), px: dateToPx(start), w: days * TS_DAY_PX[timescale] });
+  }
+  return row;
+}
+
+function buildMonthRow() {
+  const row = [];
+  let yr = PROJECT_START.getFullYear();
+  let mo = PROJECT_START.getMonth();
+  while (true) {
+    const start = new Date(yr, mo, 1);
+    const end   = new Date(yr, mo + 1, 1);
+    if (start > PROJECT_END) break;
+    const days = (end - start) / 86400000;
+    row.push({
+      label: start.toLocaleDateString('en-GB',{month:'short', year:'2-digit'}),
+      px: dateToPx(start),
+      w: days * TS_DAY_PX[timescale],
+    });
+    mo++;
+    if (mo > 11) { mo = 0; yr++; }
+  }
+  return row;
+}
+
+// ══════════════════════════════════════════════
+//  SIDEBAR
+// ══════════════════════════════════════════════
+
+function buildSidebar() {
+  const c54 = document.getElementById('phase-list-c54');
+  const c54a = document.getElementById('phase-list-c54a');
+
+  PHASES.forEach(p => {
+    const el = document.createElement('div');
+    el.className = 'phase-item';
+    el.innerHTML = `
+      <div class="phase-dot" style="background:${p.color}"></div>
+      <div>
+        <div class="phase-label">${p.label}</div>
+        <div class="phase-dates">${formatDate(p.start)} → OCD ${formatDate(p.ocd)}</div>
+      </div>
+    `;
+    (p.plot === 'C54' ? c54 : c54a).appendChild(el);
+  });
+}
+
+// ══════════════════════════════════════════════
+//  GANTT
+// ══════════════════════════════════════════════
+
+function buildGantt() {
+  const container = document.getElementById('gantt-container');
+  const LABEL_W = 320;
+  const ROW_H   = 26;
+  const todayPx = dateToPx(TODAY);
+  const totalW  = totalPx();
+  const { row1, row2 } = buildTimeTicks();
+
+  const headerH  = row1 ? 46 : 28;
+  const row2Top  = row1 ? 18 : 0;
+  const navTodayPct = Math.min(99, (todayPx / totalW) * 100);
+
+  // ── rows HTML ──
+  let rows = `<div style="position:relative;display:flex;flex-direction:column;">`;
+
+  TASKS.forEach(task => {
+    const isSum  = task.type === 'summary';
+    const isMile = task.type === 'milestone';
+    const indent = task.level * 12;
+
+    const startPx = dateToPx(task.start);
+    const endPx   = dateToPx(task.end);
+    const barW    = Math.max(isMile ? 0 : 3, endPx - startPx);
+    const dur     = Math.round(daysBetween(task.start, task.end));
+
+    const barColor = isMile ? '' : (task.color || '#475569');
+    const barH = isSum ? 8 : 14;
+    const barTop = (ROW_H - barH) / 2;
+
+    // Show bar label only when bar is wide enough
+    const minPxForLabel = timescale === 'week' ? 60 : timescale === 'month' ? 20 : 14;
+    const showLabel = !isMile && barW > minPxForLabel;
+
+    const dattr = `data-title="${task.name.replace(/"/g,"'")}" data-start="${formatDate(task.start)}" data-end="${formatDate(task.end)}" data-dur="${dur}d"`;
+
+    rows += `<div class="gantt-row ${isSum?'summary':''}" ${dattr}
+        onmouseenter="showTooltip(event,this)" onmouseleave="hideTooltip()"
+        style="display:flex;min-height:${ROW_H}px;border-bottom:1px solid rgba(30,40,64,0.45);">
+
+      <div style="width:${LABEL_W}px;flex-shrink:0;display:flex;align-items:center;
+          padding:0 8px;gap:4px;border-right:1px solid var(--border);
+          background:${isSum?'rgba(37,99,235,0.03)':'var(--bg)'};">
+        <span style="display:inline-block;width:${indent}px;flex-shrink:0;"></span>
+        ${isSum ? `<span style="width:5px;height:5px;background:${barColor};border-radius:1px;flex-shrink:0;"></span>` : ''}
+        <span style="
+          font-size:${isSum?11.5:11}px;
+          font-weight:${isSum?600:400};
+          color:${isMile?'var(--yellow)':isSum?'var(--text-bright)':'var(--text)'};
+          font-family:${isMile?"'DM Mono',monospace":"'Barlow',sans-serif"};
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:${LABEL_W-indent-36}px;
+        " title="${task.name}">${task.name}</span>
+      </div>
+
+      <div style="width:${totalW}px;min-width:${totalW}px;height:${ROW_H}px;position:relative;flex-shrink:0;">
+          ${isMile
+            ? `<div style="position:absolute;left:${startPx-6}px;top:${(ROW_H-12)/2}px;
+                width:12px;height:12px;background:var(--yellow);
+                transform:rotate(45deg);border-radius:2px;z-index:2;cursor:pointer;"
+                ${dattr} onmouseenter="showTooltip(event,this)" onmouseleave="hideTooltip()"></div>`
+            : `<div style="
+                position:absolute;left:${startPx}px;width:${barW}px;
+                top:${barTop}px;height:${barH}px;
+                background:${barColor};border-radius:${isSum?1:3}px;
+                opacity:${isSum?0.65:0.85};
+                display:flex;align-items:center;overflow:hidden;
+                cursor:pointer;transition:opacity 0.15s;z-index:2;"
+                ${dattr} onmouseenter="showTooltip(event,this)" onmouseleave="hideTooltip()"
+                onmouseover="this.style.opacity=1" onmouseout="this.style.opacity='${isSum?0.65:0.85}'">
+                ${showLabel ? `<span style="font-family:'DM Mono',monospace;font-size:8px;color:rgba(255,255,255,0.9);padding:0 5px;white-space:nowrap;overflow:hidden;">${task.name.substring(0,24)}</span>` : ''}
+              </div>`
+          }
+      </div>
+    </div>`;
+  });
+
+  rows += `</div>`;
+
+  container.innerHTML = `
+    <div style="padding:10px 16px 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+      background:var(--bg);border-bottom:1px solid var(--border);
+      position:sticky;top:0;z-index:30;">
+      <div class="section-title" style="margin:0;flex:1;">Master Programme — All Phases &amp; Blocks</div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">
+        <span style="color:var(--red);">▌</span> Today: ${formatDate(TODAY)}
+        &nbsp;|&nbsp; ${formatDate(PROJECT_START)} → ${formatDate(PROJECT_END)}
+        &nbsp;|&nbsp; <span style="color:var(--accent2);">${totalProjectDays().toFixed(0)} days</span>
+      </div>
+    </div>
+
+    <!-- Sticky timeline header (frozen on vertical scroll, synced horizontally) -->
+    <div id="ganttHeaderBar" style="
+      position:sticky;top:37px;z-index:25;
+      background:var(--surface);
+      border-bottom:2px solid var(--border2);
+      overflow:hidden;
+    ">
+      <div id="ganttHeaderInner" style="display:flex;width:${LABEL_W + totalW}px;">
+
+        <!-- Frozen label column -->
+        <div style="width:${LABEL_W}px;flex-shrink:0;
+          display:flex;align-items:flex-end;
+          padding:0 10px 4px;
+          border-right:1px solid var(--border2);
+          height:${headerH}px;
+          background:var(--surface);">
+          <span style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;">Task / Phase</span>
+        </div>
+
+        <!-- Timeline ticks -->
+        <div style="flex:1;position:relative;height:${headerH}px;">
+
+          ${row1 ? `<div style="position:absolute;top:0;left:0;right:0;height:18px;border-bottom:1px solid var(--border);">
+            ${row1.map(t => `<div style="
+              position:absolute;left:${t.px}px;width:${t.w}px;height:18px;
+              display:flex;align-items:center;justify-content:center;
+              font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:600;
+              color:var(--text-bright);border-right:1px solid var(--border2);
+              overflow:hidden;white-space:nowrap;
+            ">${t.label}</div>`).join('')}
+          </div>` : ''}
+
+          <div style="position:absolute;top:${row2Top}px;left:0;right:0;height:${headerH - row2Top}px;">
+            ${row2.map(t => {
+              const minW = timescale === 'week' ? 38 : timescale === 'month' ? 22 : 30;
+              const showSub = t.sub && t.w > minW;
+              return `<div style="
+                position:absolute;left:${t.px}px;width:${t.w}px;height:${headerH - row2Top}px;
+                display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+                font-family:'DM Mono',monospace;font-size:${timescale==='week'?9:10}px;
+                color:var(--text-dim);border-right:1px solid var(--border);
+                overflow:hidden;white-space:nowrap;
+                background:${t.start <= TODAY && TODAY < t.end ? 'rgba(37,99,235,0.07)' : 'transparent'};
+              ">
+                <span style="color:${t.start <= TODAY && TODAY < t.end ? 'var(--accent2)' : 'var(--text)'};font-weight:${t.start<=TODAY&&TODAY<t.end?600:400};">${t.label}</span>
+                ${showSub ? `<span style="font-size:8px;color:var(--text-dim);">${t.sub}</span>` : ''}
+              </div>`;
+            }).join('')}
+          </div>
+
+          <!-- Today marker -->
+          <div style="position:absolute;left:${todayPx}px;top:0;bottom:0;width:2px;background:rgba(239,68,68,0.85);pointer-events:none;z-index:5;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini navigator -->
+    <div id="ganttNav" style="
+      position:sticky;top:${37 + headerH}px;z-index:24;
+      display:flex;
+      background:var(--surface2);
+      border-bottom:1px solid var(--border);
+      height:10px;overflow:hidden;
+    ">
+      <div style="width:${LABEL_W}px;flex-shrink:0;background:var(--surface2);border-right:1px solid var(--border2);"></div>
+      <div style="flex:1;position:relative;overflow:hidden;">
+        <div style="position:absolute;left:0;top:0;bottom:0;width:${totalW}px;">
+          <div style="position:absolute;left:${navTodayPct}%;top:0;bottom:0;width:1px;background:rgba(239,68,68,0.7);"></div>
+          ${row2.map(t => {
+            const l = (t.px / totalW) * 100;
+            const w = (t.w / totalW) * 100;
+            const isNow = t.start <= TODAY && TODAY < t.end;
+            return `<div style="position:absolute;left:${l}%;width:${w}%;top:0;bottom:0;background:${isNow?'rgba(37,99,235,0.35)':'transparent'};border-right:1px solid rgba(30,40,64,0.6);"></div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Scrollable rows area -->
+    <div id="ganttScrollArea" style="overflow-x:auto;">
+      <div style="display:inline-block;min-width:100%;">
+        ${rows}
+      </div>
+    </div>
+  `;
+
+  // ── Sync horizontal scroll: rows → header + nav ──
+  requestAnimationFrame(() => {
+    const scrollArea = document.getElementById('ganttScrollArea');
+    const headerInner = document.getElementById('ganttHeaderInner');
+    const navInner = document.querySelector('#ganttNav > div:last-child > div');
+
+    if (!scrollArea || !headerInner) return;
+
+    scrollArea.addEventListener('scroll', () => {
+      const sl = scrollArea.scrollLeft;
+      // Shift header inner so timeline ticks align with rows
+      headerInner.style.transform = `translateX(-${sl}px)`;
+      // Shift nav proportionally
+      if (navInner) {
+        const frac = sl / (totalW || 1);
+        navInner.style.transform = `translateX(-${frac * scrollArea.clientWidth}px)`;
+      }
+    });
+  });
+}
+
+// ══════════════════════════════════════════════
+//  TAKT PLAN
+// ══════════════════════════════════════════════
+
+function buildTaktBlockSelector() {
+  const sel = document.getElementById('taktBlockSelector');
+  if (!sel) return;
+  sel.innerHTML = '';
+  // Only shown in single-block mode
+  if (taktView !== 'single') { sel.style.display = 'none'; return; }
+  sel.style.display = 'flex';
+  LBS_BLOCKS.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'blk-btn' + (b.id === selectedBlock ? ' active' : '');
+    btn.textContent = b.label;
+    btn.style.borderColor = b.color;
+    btn.onclick = () => { selectedBlock = b.id; buildTaktBlockSelector(); buildTaktGrid(); };
+    sel.appendChild(btn);
+  });
+}
+
+function buildTradeLegend() {
+  const el = document.getElementById('tradeLegend');
+  if (!el) return;
+  const trades = LBS_BLOCKS[0].trades;
+  el.innerHTML = trades.map(t =>
+    `<div style="display:flex;align-items:center;gap:5px;">
+      <div style="width:12px;height:12px;border-radius:2px;background:${t.color};opacity:0.85;"></div>
+      <span style="font-size:10.5px;color:var(--text-dim);">${t.name}</span>
+    </div>`
+  ).join('');
+}
+
+function setTaktView(v) {
+  taktView = v;
+  document.getElementById('taktViewAll').classList.toggle('active', v === 'all');
+  document.getElementById('taktViewSingle').classList.toggle('active', v === 'single');
+  buildTaktBlockSelector();
+  buildTaktGrid();
+}
+
+function buildTaktGrid() {
+  const wrapper = document.getElementById('taktGridWrapper');
+  if (!wrapper) return;
+
+  if (taktView === 'all') {
+    buildTaktGridAll(wrapper);
+  } else {
+    buildTaktGridSingle(wrapper, LBS_BLOCKS.find(b => b.id === selectedBlock));
+  }
+}
+
+// ── All-Blocks Takt: one sub-table per block, stacked vertically ──
+function buildTaktGridAll(wrapper) {
+  const WEEKS = 20;
+  const CELL_W = 60;
+  const CELL_H = 28;
+  const LABEL_W = 110;
+
+  let html = '';
+
+  LBS_BLOCKS.forEach(block => {
+    const totalLevels = block.levels;
+
+    html += `<div style="margin-bottom:20px;">
+      <!-- Block header -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <div style="width:10px;height:10px;border-radius:50%;background:${block.color};"></div>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text-bright);">${block.label}</span>
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">${block.levels} floors · Super-structure from ${block.superStart.toLocaleDateString('en-GB',{month:'short',year:'numeric'})} · OCD: ${block.ocd} · Takt ${block.takt}d</span>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;">
+        <div style="display:inline-block;min-width:100%;">
+          ${buildTaktTableHTML(block, WEEKS, CELL_W, CELL_H, LABEL_W)}
+        </div>
+      </div>
+    </div>`;
+  });
+
+  wrapper.innerHTML = html;
+}
+
+// ── Single Block Takt: full detail with all floors ──
+function buildTaktGridSingle(wrapper, block) {
+  if (!block) return;
+  const WEEKS = 28;
+  const CELL_W = 68;
+  const CELL_H = 32;
+  const LABEL_W = 130;
+
+  wrapper.innerHTML = `<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">
+    <div style="display:inline-block;min-width:100%;">
+      ${buildTaktTableHTML(block, WEEKS, CELL_W, CELL_H, LABEL_W)}
+    </div>
+  </div>`;
+}
+
+function buildTaktTableHTML(block, WEEKS, CELL_W, CELL_H, LABEL_W) {
+  const totalCols = 1 + WEEKS;
+  const gridCols = `${LABEL_W}px repeat(${WEEKS}, ${CELL_W}px)`;
+
+  // Get current week index relative to block's super-start
+  const msPerWeek = 7 * 86400000;
+  const curWeekIdx = Math.floor((TODAY - block.superStart) / msPerWeek);
+
+  let html = `<div style="display:grid;grid-template-columns:${gridCols};font-family:'DM Mono',monospace;">`;
+
+  // ── Header row ──
+  html += `<div style="padding:6px 10px;background:var(--surface2);border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-size:9px;color:var(--text-dim);letter-spacing:1px;display:flex;align-items:center;">FLOOR / WEEK</div>`;
+  for (let w = 0; w < WEEKS; w++) {
+    const wkDate = new Date(block.superStart.getTime() + w * 7 * 86400000);
+    const mo = wkDate.toLocaleDateString('en-GB',{month:'short'});
+    const yr = wkDate.getFullYear().toString().slice(2);
+    const wn = Math.ceil((wkDate - new Date(wkDate.getFullYear(),0,1)) / (7*86400000));
+    const isNow = w === curWeekIdx;
+    html += `<div style="
+      padding:4px 2px;text-align:center;
+      background:${isNow?'rgba(37,99,235,0.18)':'var(--surface2)'};
+      border-bottom:1px solid var(--border);border-right:1px solid rgba(30,40,64,0.5);
+      font-size:8.5px;color:${isNow?'var(--accent2)':'var(--text-dim)'};
+      line-height:1.3;font-weight:${isNow?600:400};
+    ">W${wn}<br/><span style="font-size:7.5px;">${mo}'${yr}</span></div>`;
+  }
+
+  // ── Floor rows — top floor first (highest level down to L02) ──
+  for (let fi = block.levels - 1; fi >= 0; fi--) {
+    const floor = fi + 2; // L02 = index 0
+    const fd = block.floorData[fi];
+    const isBottleneck = fd.buffer === 0;
+
+    // Row label
+    html += `<div style="
+      padding:4px 10px;
+      background:${isBottleneck?'rgba(239,68,68,0.06)':'var(--bg)'};
+      border-bottom:1px solid rgba(30,40,64,0.4);
+      border-right:1px solid var(--border);
+      display:flex;align-items:center;gap:6px;
+      font-size:10px;color:${isBottleneck?'var(--red)':'var(--text-dim)'};
+    ">
+      <div style="width:4px;height:4px;border-radius:50%;background:${isBottleneck?'var(--red)':'var(--text-dim)'};"></div>
+      L${String(floor).padStart(2,'0')}
+      ${isBottleneck?'<span style="font-size:8px;color:var(--red);margin-left:2px;">⚠</span>':''}
+    </div>`;
+
+    // Week cells for this floor
+    for (let w = 0; w < WEEKS; w++) {
+      const isNow = w === curWeekIdx;
+      const activeTrades = [];
+
+      block.trades.forEach(trade => {
+        // fi = floor index (0 = L02), each floor starts 1 takt after previous
+        const tradeStartWeek = fi + trade.offset;
+        const tradeEndWeek   = tradeStartWeek + 1;
+        if (w >= tradeStartWeek && w < tradeEndWeek) activeTrades.push(trade);
+      });
+
+      const isConflict = activeTrades.length > 1;
+      let cellBg = isNow ? 'rgba(37,99,235,0.06)' : 'transparent';
+      if (isConflict) cellBg = 'rgba(239,68,68,0.06)';
+
+      let inner = '';
+      if (activeTrades.length === 1) {
+        const t = activeTrades[0];
+        inner = `<div style="
+          position:absolute;inset:3px;
+          background:${t.color};opacity:0.82;
+          border-radius:3px;
+          display:flex;align-items:center;justify-content:center;
+          font-size:8px;color:rgba(255,255,255,0.95);font-weight:500;
+        ">${t.short}</div>`;
+      } else if (activeTrades.length > 1) {
+        const w2 = 100 / activeTrades.length;
+        inner = activeTrades.map((t, ai) =>
+          `<div style="
+            position:absolute;top:3px;bottom:3px;
+            left:${ai*w2+1}%;width:${w2-2}%;
+            background:${t.color};opacity:0.8;
+            border-radius:2px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:7px;color:rgba(255,255,255,0.95);
+          ">${t.short}</div>`
+        ).join('');
+        inner += `<div style="position:absolute;top:2px;right:2px;width:5px;height:5px;background:var(--red);border-radius:50%;z-index:2;"></div>`;
+      }
+
+      html += `<div style="
+        position:relative;height:${CELL_H}px;
+        background:${cellBg};
+        border-bottom:1px solid rgba(30,40,64,0.35);
+        border-right:1px solid rgba(30,40,64,0.35);
+        ${isNow?'border-left:1px solid rgba(37,99,235,0.4);':''}
+      ">${inner}</div>`;
+    }
+  }
+
+  html += `</div>`; // close grid
+  return html;
+}
+
+// ══════════════════════════════════════════════
+//  LOCATION-BASED SCHEDULE
+// ══════════════════════════════════════════════
+
+function buildLBSBlockFilter() {
+  const el = document.getElementById('lbsBlockFilter');
+  if (!el) return;
+  let html = `<button class="blk-btn ${lbsFilterBlock==='all'?'active':''}" onclick="setLBSFilter('all')" style="border-color:var(--border2);">All Blocks</button>`;
+  LBS_BLOCKS.forEach(b => {
+    html += `<button class="blk-btn ${lbsFilterBlock===b.id?'active':''}" onclick="setLBSFilter('${b.id}')" style="${lbsFilterBlock===b.id?`border-color:${b.color};color:${b.color};background:${b.color}22;`:''}">${b.label}</button>`;
+  });
+  el.innerHTML = html;
+}
+
+function setLBSFilter(id) {
+  lbsFilterBlock = id;
+  buildLBSBlockFilter();
+  buildLBSContent();
+}
+
+function setLBSTab(tab) {
+  lbsTab = tab;
+  document.querySelectorAll('#view-lbs .ts-btn').forEach((b,i) => b.classList.toggle('active', i === (tab==='flow'?0:1)));
+  buildLBSContent();
+}
+
+function buildLBSContent() {
+  const el = document.getElementById('lbsContent');
+  if (!el) return;
+  const blocks = lbsFilterBlock === 'all' ? LBS_BLOCKS : LBS_BLOCKS.filter(b => b.id === lbsFilterBlock);
+
+  if (lbsTab === 'flow') {
+    buildLBSFlowLines(el, blocks);
+  } else {
+    buildLBSTable(el, blocks);
+  }
+}
+
+// ── Flow Lines: LBMS-style diagonal flow visualisation per block ──
+function buildLBSFlowLines(el, blocks) {
+  const WEEKS = 22;
+  const CELL_W = 52;
+  const CELL_H = 22;
+  const LABEL_W = 100;
+
+  let html = '';
+
+  blocks.forEach(block => {
+    const msPerWeek = 7 * 86400000;
+    const curW = Math.floor((TODAY - block.superStart) / msPerWeek);
+
+    html += `<div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="width:10px;height:10px;border-radius:50%;background:${block.color};"></div>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text-bright);">${block.label}</span>
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">${block.levels} storeys · OCD ${block.ocd} · Takt ${block.takt}d/floor</span>
+        <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--accent2);margin-left:auto;">Super-structure: ${block.superStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}</span>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg);">
+        <div style="display:inline-block;">
+          <div style="display:grid;grid-template-columns:${LABEL_W}px repeat(${WEEKS},${CELL_W}px);font-family:'DM Mono',monospace;">
+
+            <!-- header -->
+            <div style="padding:5px 8px;background:var(--surface2);border-bottom:1px solid var(--border);border-right:1px solid var(--border);font-size:9px;color:var(--text-dim);">LEVEL</div>`;
+
+    for (let w = 0; w < WEEKS; w++) {
+      const wd = new Date(block.superStart.getTime() + w * msPerWeek);
+      const mo = wd.toLocaleDateString('en-GB',{month:'short'});
+      const wn = Math.ceil((wd - new Date(wd.getFullYear(),0,1)) / msPerWeek);
+      const isNow = w === curW;
+      html += `<div style="padding:4px 2px;text-align:center;background:${isNow?'rgba(37,99,235,0.2)':'var(--surface2)'};border-bottom:1px solid var(--border);border-right:1px solid rgba(30,40,64,0.5);font-size:8px;color:${isNow?'var(--accent2)':'var(--text-dim)'};line-height:1.3;font-weight:${isNow?600:400};">W${wn}<br/><span style="font-size:7px;">${mo}</span></div>`;
+    }
+
+    // Rows — top floor first
+    for (let fi = block.levels - 1; fi >= 0; fi--) {
+      const floor = fi + 2;
+      const fd = block.floorData[fi];
+      const isBottleneck = fd.buffer === 0;
+
+      html += `<div style="padding:3px 8px;background:${isBottleneck?'rgba(239,68,68,0.06)':'transparent'};border-bottom:1px solid rgba(30,40,64,0.3);border-right:1px solid var(--border);font-size:9.5px;color:${isBottleneck?'var(--red)':'var(--text-dim)'};display:flex;align-items:center;gap:5px;white-space:nowrap;">
+        ${isBottleneck?'⚠ ':''}L${String(floor).padStart(2,'0')}
+      </div>`;
+
+      for (let w = 0; w < WEEKS; w++) {
+        const isNow = w === curW;
+        // Which trade for this floor+week?
+        let activeTrades = [];
+        block.trades.forEach(t => {
+          const ts = fi + t.offset;
+          if (w >= ts && w < ts + 1) activeTrades.push(t);
+        });
+
+        // Past or future shading
+        const isPast = w < curW;
+        const isFuture = w > curW;
+
+        let inner = '';
+        if (activeTrades.length === 1) {
+          const t = activeTrades[0];
+          const op = isPast ? 0.4 : 0.82;
+          inner = `<div style="position:absolute;inset:2px;background:${t.color};opacity:${op};border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7.5px;color:rgba(255,255,255,0.95);">${t.short}</div>`;
+        } else if (activeTrades.length > 1) {
+          const pw = 100 / activeTrades.length;
+          inner = activeTrades.map((t, ai) =>
+            `<div style="position:absolute;top:2px;bottom:2px;left:${ai*pw+0.5}%;width:${pw-1}%;background:${t.color};opacity:0.78;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:6.5px;color:rgba(255,255,255,0.9);">${t.short}</div>`
+          ).join('');
+          inner += `<div style="position:absolute;top:1px;right:1px;width:5px;height:5px;background:var(--red);border-radius:50%;z-index:2;"></div>`;
+        }
+
+        html += `<div style="position:relative;height:${CELL_H}px;background:${isNow?'rgba(37,99,235,0.06)':isFuture?'rgba(10,13,18,0.3)':'transparent'};border-bottom:1px solid rgba(30,40,64,0.3);border-right:1px solid rgba(30,40,64,0.3);${isNow?'border-left:1px solid rgba(37,99,235,0.35);':''}">${inner}</div>`;
+      }
+    }
+
+    html += `</div></div></div>
+
+      <!-- Summary stats bar -->
+      <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;">
+        ${block.trades.map(t => {
+          const totalCrew = Object.values(block.floorData[0].crew).reduce((a,b)=>a+b,0);
+          return `<div style="display:flex;align-items:center;gap:5px;">
+            <div style="width:8px;height:8px;border-radius:1px;background:${t.color};opacity:0.8;"></div>
+            <span style="font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;">${t.short}: ${block.floorData[0].crew[t.short]??'—'} crew</span>
+          </div>`;
+        }).join('')}
+        <div style="margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);">
+          Total floors: <span style="color:var(--text-bright);">${block.levels}</span> &nbsp;·&nbsp;
+          Total duration: <span style="color:var(--accent2);">${block.levels * block.takt + 3} weeks</span> (incl. finishing lag)
+        </div>
+      </div>
+    </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+// ── Trade Table: tabular view per block ──
+function buildLBSTable(el, blocks) {
+  let html = '';
+
+  blocks.forEach(block => {
+    html += `<div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="width:10px;height:10px;border-radius:50%;background:${block.color};"></div>
+        <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:600;color:var(--text-bright);">${block.label} — Trade Flow Summary</span>
+      </div>
+      <div style="overflow-x:auto;border:1px solid var(--border);border-radius:6px;">
+        <table style="border-collapse:collapse;width:100%;font-size:11px;">
+          <thead>
+            <tr>
+              <th style="background:var(--surface2);padding:8px 12px;text-align:left;font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap;">FLOOR</th>
+              ${block.trades.map(t => `<th style="background:var(--surface2);padding:8px 10px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;border-bottom:1px solid var(--border);white-space:nowrap;">
+                <div style="display:flex;align-items:center;gap:4px;justify-content:center;">
+                  <div style="width:8px;height:8px;border-radius:1px;background:${t.color};"></div>
+                  ${t.short}
+                </div>
+              </th>`).join('')}
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);border-bottom:1px solid var(--border);">BUFFER</th>
+              <th style="background:var(--surface2);padding:8px 10px;text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);border-bottom:1px solid var(--border);">STATUS</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+    block.floorData.slice().reverse().forEach(fd => {
+      const isBottleneck = fd.buffer === 0;
+      html += `<tr style="background:${isBottleneck?'rgba(239,68,68,0.04)':'transparent'};">
+        <td style="padding:6px 12px;border-bottom:1px solid rgba(30,40,64,0.4);font-family:'DM Mono',monospace;font-size:10px;color:${isBottleneck?'var(--red)':'var(--text-dim)'};">
+          L${String(fd.floor).padStart(2,'0')} ${isBottleneck?'⚠':''}
+        </td>
+        ${block.trades.map(t => {
+          const crew = fd.crew[t.short] ?? '—';
+          return `<td style="padding:6px 10px;border-bottom:1px solid rgba(30,40,64,0.4);text-align:center;font-family:'DM Mono',monospace;font-size:10px;">
+            <span style="background:${t.color}22;color:${t.color};padding:2px 7px;border-radius:3px;font-weight:500;">${crew}</span>
+          </td>`;
+        }).join('')}
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(30,40,64,0.4);text-align:center;font-family:'DM Mono',monospace;font-size:10px;color:${fd.buffer===0?'var(--red)':fd.buffer>=2?'var(--green)':'var(--yellow)'};">${fd.buffer}d</td>
+        <td style="padding:6px 10px;border-bottom:1px solid rgba(30,40,64,0.4);text-align:center;">
+          ${isBottleneck
+            ? `<span style="background:rgba(239,68,68,0.15);color:var(--red);font-size:9px;padding:2px 6px;border-radius:3px;font-family:'DM Mono',monospace;">⚠ ZERO BUFFER</span>`
+            : `<span style="background:rgba(34,197,94,0.12);color:var(--green);font-size:9px;padding:2px 6px;border-radius:3px;font-family:'DM Mono',monospace;">✓ FLOW OK</span>`
+          }
+        </td>
+      </tr>`;
+    });
+
+    html += `</tbody></table></div></div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+function buildLPS() {
+  // PPC bars
+  const barsEl = document.getElementById('ppcBars');
+  barsEl.innerHTML = '';
+  LPS_WEEKS.forEach(wk => {
+    const pct = wk.ppc;
+    const color = pct >= 80 ? 'var(--green)' : pct >= 70 ? 'var(--yellow)' : 'var(--red)';
+    const h = (pct / 100) * 100;
+    barsEl.innerHTML += `<div class="ppc-bar-col">
+      <div class="ppc-bar-val">${pct}%</div>
+      <div class="ppc-bar" style="height:${h}px;background:${color};"></div>
+      <div class="ppc-bar-label">${wk.week}</div>
+    </div>`;
+  });
+
+  // Week cards
+  const weekView = document.getElementById('lpsWeekView');
+  weekView.innerHTML = '';
+  LPS_WEEKS.forEach(wk => {
+    const ppc = wk.ppc;
+    const badgeClass = ppc >= 80 ? 'ppc-good' : ppc >= 70 ? 'ppc-warn' : 'ppc-bad';
+    let tasksHtml = '';
+    wk.tasks.forEach(t => {
+      const dotColor = t.status === 'completed' ? 'var(--text-dim)' : t.status === 'committed' ? 'var(--green)' : 'var(--yellow)';
+      tasksHtml += `<div class="lps-task ${t.status}">
+        <div class="task-status-dot" style="background:${dotColor}"></div>
+        <div class="lps-task-name">${t.name}</div>
+        <div class="lps-task-who">${t.who}</div>
+      </div>`;
+    });
+
+    weekView.innerHTML += `<div class="lps-week-card">
+      <div class="lps-week-header">
+        <span>${wk.week}</span>
+        <span class="ppc-badge ${badgeClass}">${ppc}%</span>
+      </div>
+      <div class="lps-task-list">${tasksHtml}</div>
+    </div>`;
+  });
+
+  // Constraints
+  const logEl = document.getElementById('constraintLog');
+  logEl.innerHTML = '';
+  CONSTRAINTS.forEach(c => {
+    const statusColor = c.status === 'resolved' ? 'var(--green)' : 'var(--yellow)';
+    logEl.innerHTML += `<div class="constraint-item">
+      <div class="constraint-type ${c.type}">${c.label}</div>
+      <div style="flex:1;">
+        <div style="font-size:11px;color:var(--text);">${c.task}</div>
+        <div style="font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;">${c.block} · Due ${c.due}</div>
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:${statusColor};padding:0 8px;flex-shrink:0;">${c.status.toUpperCase()}</div>
+    </div>`;
+  });
+}
+
+// ══════════════════════════════════════════════
+//  TOOLTIP
+// ══════════════════════════════════════════════
+
+const tooltip = document.getElementById('tooltip');
+
+function showTooltip(e, el) {
+  const title = el.dataset.title;
+  const start = el.dataset.start;
+  const end   = el.dataset.end;
+  const dur   = el.dataset.dur;
+  if (!title) return;
+
+  tooltip.innerHTML = `
+    <div class="tooltip-title">${title}</div>
+    <div class="tooltip-row"><span class="tooltip-key">Start</span><span class="tooltip-val">${start||'—'}</span></div>
+    <div class="tooltip-row"><span class="tooltip-key">Finish</span><span class="tooltip-val">${end||'—'}</span></div>
+    <div class="tooltip-row"><span class="tooltip-key">Duration</span><span class="tooltip-val">${dur||'—'}</span></div>
+  `;
+
+  const x = Math.min(e.clientX + 12, window.innerWidth - 310);
+  const y = Math.min(e.clientY + 12, window.innerHeight - 120);
+  tooltip.style.left = x + 'px';
+  tooltip.style.top  = y + 'px';
+  tooltip.classList.add('visible');
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+document.addEventListener('mousemove', (e) => {
+  if (tooltip.classList.contains('visible')) {
+    const x = Math.min(e.clientX + 12, window.innerWidth - 310);
+    const y = Math.min(e.clientY + 12, window.innerHeight - 120);
+    tooltip.style.left = x + 'px';
+    tooltip.style.top  = y + 'px';
+  }
+});
+
+// ══════════════════════════════════════════════
+//  VIEW SWITCHING & ZOOM
+// ══════════════════════════════════════════════
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach((t,i) => {
+    const views = ['master','takt','lps','lbs'];
+    t.classList.toggle('active', views[i] === view);
+  });
+  document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('view-' + view).classList.add('active');
+
+  const tsCtrl = document.getElementById('timescaleControls');
+  tsCtrl.style.display = view === 'master' ? 'flex' : 'none';
+}
+
+function setTimescale(ts) {
+  timescale = ts;
+  // Update button states
+  document.querySelectorAll('.ts-btn').forEach(btn => {
+    const map = { 'Weekly':'week', 'Monthly':'month', 'Quarterly':'quarter', 'Half-Year':'half', 'Yearly':'year' };
+    btn.classList.toggle('active', map[btn.textContent] === ts);
+  });
+  buildGantt();
+  // Scroll to today after rebuild
+  setTimeout(() => {
+    const area = document.getElementById('ganttScrollArea');
+    if (!area) return;
+    const LABEL_W = 320;
+    const px = dateToPx(TODAY);
+    const vpW = area.clientWidth - LABEL_W;
+    area.scrollLeft = Math.max(0, px - vpW * 0.3);
+  }, 50);
+}
+
+// ══════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════
+
+buildSidebar();
+buildGantt();
+buildTradeLegend();
+buildTaktBlockSelector();
+buildTaktGrid();
+buildLPS();
+buildLBSBlockFilter();
+buildLBSContent();
+
+// Scroll Gantt to show today on load
+setTimeout(() => {
+  const area = document.getElementById('ganttScrollArea');
+  if (!area) return;
+  const LABEL_W = 320;
+  const px = dateToPx(TODAY);
+  const vpW = area.clientWidth - LABEL_W;
+  area.scrollLeft = Math.max(0, px - vpW * 0.3);
+}, 100);
+
+</script>
+</body>
+</html>
